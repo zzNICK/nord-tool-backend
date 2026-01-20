@@ -1,0 +1,23 @@
+# application-local.yml
+# Este arquivo ativa o profile 'local'.
+server:
+  port: 8081
+
+spring:
+  application:
+    name: nord-tool-backend
+
+  # Configurações do banco de dados PostgreSQL
+  datasource:
+    url: jdbc:postgresql://localhost:8080/apartamento
+    username: user_app_nord
+    password: pass_user_nord_local
+    driver-class-name: org.postgresql.Driver
+
+    type: com.zaxxer.hikari.HikariDataSource
+    hikari:
+      minimum-idle: 1 # Colocar 5 quando for para PRD
+      maximum-pool-size: 30 # Maximo de conexoes abertas
+      idle-timeout: 300000 # Maximo que uma conexao pode ficar ociosa esperando o tempo de fechar
+      max-lifetime: 1200000 # Tempo máximo de vida de uma conexão.
+      auto-commit: false # Desligar o commit automatico

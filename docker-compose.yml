@@ -1,0 +1,38 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: postgres
+    ports:
+      - "8080:5432"
+    environment:
+      POSTGRES_DB: apartamento
+      POSTGRES_USER: user_app_nord
+      POSTGRES_PASSWORD: pass_user_nord_local
+    volumes:
+      - "postgres_data:/var/lib/postgresql/data"
+      - "C:/Users/nicon/Documents/projects/nord-tool-scripts-sql:/sql"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user_app_nord -d apartamento"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  nord-tool-backend:
+    build: .
+    container_name: nord-tool-backend
+    ports:
+      - "8081:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/apartamento
+      SPRING_DATASOURCE_USERNAME: user_app_nord
+      SPRING_DATASOURCE_PASSWORD: pass_user_nord_local
+      SPRING_PROFILES_ACTIVE: docker
+    restart: always
+
+volumes:
+  postgres_data:
