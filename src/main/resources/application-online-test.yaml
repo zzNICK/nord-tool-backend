@@ -1,0 +1,30 @@
+server:
+  port: ${SERVER_PORT:8081}
+
+spring:
+  datasource:
+    # Aceita as propriedades nativas do Spring usadas pelo Nexus Bridge e
+    # preserva compatibilidade com as variaveis PG* do Railway.
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://${PGHOST}:${PGPORT:5432}/${PGDATABASE}}
+    username: ${SPRING_DATASOURCE_USERNAME:${PGUSER}}
+    password: ${SPRING_DATASOURCE_PASSWORD:${PGPASSWORD}}
+    driver-class-name: org.postgresql.Driver
+    type: com.zaxxer.hikari.HikariDataSource
+    hikari:
+      minimum-idle: 1
+      maximum-pool-size: 10
+      idle-timeout: 300000
+      max-lifetime: 1200000
+      auto-commit: false
+      # Enviado no startup do protocolo PostgreSQL e, portanto, aplicado antes
+      # de qualquer transacao. Isso evita que um rollback do pool desfaça o
+      # search_path quando auto-commit=false.
+      data-source-properties:
+        currentSchema: 'apartamento,public'
+        options: '-c search_path=apartamento,public'
+      connection-init-sql: 'SET search_path TO apartamento, public'
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none
