@@ -1,38 +1,31 @@
 package br.com.nord_tool_backend.repository.impl;
 
-import br.com.nord_tool_backend.controller.response.NordHttpEnum;
 import br.com.nord_tool_backend.domain.DiaSemana;
-import br.com.nord_tool_backend.excepetion.ValidacaoException;
 import br.com.nord_tool_backend.repository.DiaSemanaRepository;
-import br.com.nord_tool_backend.repository.RepositoryJdbcOperationsSql;
-import br.com.nord_tool_backend.utils.StringUtils;
-import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.exception.ExceptionUtils;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.PropertySource;
+import br.com.nord_tool_backend.repository.jdbc.JdbcExecutor;
+import br.com.nord_tool_backend.repository.jdbc.SqlQueries;
 import org.springframework.jdbc.core.BeanPropertyRowMapper;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
 
 @Repository
-@Slf4j
-@PropertySource("classpath:query/dia-semana.properties")
-public class DiaSemanaRepositoryImpl extends RepositoryJdbcOperationsSql<DiaSemana> implements DiaSemanaRepository {
+public class DiaSemanaRepositoryImpl implements DiaSemanaRepository {
 
-    private static final String LISTAR_ERRO_GENERICO = "Erro ao listar os dados da tabela Dia semana";
+    private final NamedParameterJdbcTemplate jdbc;
+    private final JdbcExecutor executor;
+    private final String qListar;
 
-    @Value("${SPS.LISTAR_TODOS_DIA_SEMANA}")
-    private String queryListarTodosDiaSemana;
+    public DiaSemanaRepositoryImpl(NamedParameterJdbcTemplate jdbc, JdbcExecutor executor, SqlQueries queries) {
+        this.jdbc = jdbc;
+        this.executor = executor;
+        this.qListar = queries.get("SPS.LISTAR_TODOS_DIA_SEMANA");
+    }
 
     @Override
-    public List<DiaSemana> listarDiaSemana (){
-        try {
-            log.info("Listando todos os Dias da Semana da base de dados");
-            return buscarTodos(queryListarTodosDiaSemana, BeanPropertyRowMapper.newInstance(DiaSemana.class));
-        } catch (Exception ex) {
-            log.error(ExceptionUtils.getMessage(ex));
-            throw new ValidacaoException(NordHttpEnum.HTTP_400, StringUtils.getMensagem(LISTAR_ERRO_GENERICO), ex.getMessage());
-        }
+    public List<DiaSemana> listarDiaSemana() {
+        return executor.executar("Listar dias da semana", () ->
+                jdbc.query(qListar, BeanPropertyRowMapper.newInstance(DiaSemana.class)));
     }
 }

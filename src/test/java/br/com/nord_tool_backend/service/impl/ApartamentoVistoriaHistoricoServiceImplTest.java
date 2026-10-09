@@ -24,8 +24,7 @@ import static org.mockito.Mockito.when;
 class ApartamentoVistoriaHistoricoServiceImplTest {
 
     @InjectMocks
-    private ApartamentoVistoriaHistoricoService apartamentoVistoriaHistoricoService =
-            new ApartamentoVistoriaHistoricoServiceImpl();
+    private ApartamentoVistoriaHistoricoServiceImpl apartamentoVistoriaHistoricoService;
 
     @Mock
     private ApartamentoVistoriaHistoricoRepository apartamentoVistoriaHistoricoRepository;

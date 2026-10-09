@@ -9,7 +9,7 @@ import br.com.nord_tool_backend.repository.CronogramaSemanalRepository;
 import br.com.nord_tool_backend.service.CronogramaSemanalService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,11 +17,11 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @Service
+@RequiredArgsConstructor
 public class CronogramaSemanalServiceImpl implements CronogramaSemanalService {
     private final Logger log = LogManager.getLogger(CronogramaSemanalServiceImpl.class);
 
-    @Autowired
-    private CronogramaSemanalRepository cronogramaSemanalRepository;
+    private final CronogramaSemanalRepository cronogramaSemanalRepository;
 
     @Override
     @Transactional(rollbackFor = Exception.class)

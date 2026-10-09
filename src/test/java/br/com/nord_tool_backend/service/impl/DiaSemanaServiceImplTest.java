@@ -22,7 +22,7 @@ import static org.mockito.Mockito.when;
 class DiaSemanaServiceImplTest {
 
     @InjectMocks
-    private DiaSemanaService diaSemanaService = new DiaSemanaServiceImpl();
+    private DiaSemanaServiceImpl diaSemanaService;
 
     @Mock
     private DiaSemanaRepository diaSemanaRepository;

@@ -25,7 +25,7 @@ import static org.mockito.Mockito.*;
 public class CronogramaSemanalServiceImplTest {
 
     @InjectMocks
-    private CronogramaSemanalService cronogramaSemanalService = new CronogramaSemanalServiceImpl();
+    private CronogramaSemanalServiceImpl cronogramaSemanalService;
 
     @Mock
     private CronogramaSemanalRepository cronogramaSemanalRepository;

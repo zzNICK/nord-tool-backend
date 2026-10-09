@@ -22,7 +22,7 @@ import static org.mockito.Mockito.when;
 public class StatusVistoriaServiceImplTest {
 
     @InjectMocks
-    private StatusVistoriaService statusVistoriaService = new StatusVistoriaServiceImpl();
+    private StatusVistoriaServiceImpl statusVistoriaService;
 
     @Mock
     private StatusVistoriaRepository statusVistoriaRepository;
