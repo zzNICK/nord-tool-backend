@@ -1,64 +1,60 @@
 package br.com.nord_tool_backend.repository.impl;
 
-import br.com.nord_tool_backend.controller.response.NordHttpEnum;
 import br.com.nord_tool_backend.domain.Permissao;
-import br.com.nord_tool_backend.excepetion.ValidacaoException;
 import br.com.nord_tool_backend.repository.PermissaoRepository;
-import br.com.nord_tool_backend.repository.RepositoryJdbcOperationsSql;
-import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.exception.ExceptionUtils;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.PropertySource;
+import br.com.nord_tool_backend.repository.jdbc.JdbcExecutor;
+import br.com.nord_tool_backend.repository.jdbc.JdbcSuporte;
+import br.com.nord_tool_backend.repository.jdbc.SqlQueries;
 import org.springframework.jdbc.core.BeanPropertyRowMapper;
+import org.springframework.jdbc.core.namedparam.BeanPropertySqlParameterSource;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
+
 import java.util.List;
 
-@Repository @Slf4j
-@PropertySource("classpath:query/permissao.properties")
-public class PermissaoRepositoryImpl extends RepositoryJdbcOperationsSql<Permissao> implements PermissaoRepository {
-    @Value("${SPS.PERMISSAO.LISTAR}") private String queryListar;
-    @Value("${SPI.PERMISSAO.INSERIR}") private String queryInserir;
-    @Value("${SPU.PERMISSAO.ALTERAR}") private String queryAlterar;
-    @Value("${SPD.PERMISSAO.DELETAR}") private String queryDeletar;
+@Repository
+public class PermissaoRepositoryImpl implements PermissaoRepository {
 
+    private final NamedParameterJdbcTemplate jdbc;
+    private final JdbcExecutor executor;
+    private final String qListar;
+    private final String qInserir;
+    private final String qAlterar;
+    private final String qDeletar;
+
+    public PermissaoRepositoryImpl(NamedParameterJdbcTemplate jdbc, JdbcExecutor executor, SqlQueries queries) {
+        this.jdbc = jdbc;
+        this.executor = executor;
+        this.qListar = queries.get("SPS.PERMISSAO.LISTAR");
+        this.qInserir = queries.get("SPI.PERMISSAO.INSERIR");
+        this.qAlterar = queries.get("SPU.PERMISSAO.ALTERAR");
+        this.qDeletar = queries.get("SPD.PERMISSAO.DELETAR");
+    }
+
+    @Override
     public List<Permissao> listarPermissoes() {
-        try {
-            return buscarTodos(queryListar, BeanPropertyRowMapper.newInstance(Permissao.class));
-        } catch (Exception ex) {
-            throw tratarErro("Erro ao listar permissões", ex);
-        }
+        return executor.executar("Listar permissões", () -> jdbc.query(qListar, BeanPropertyRowMapper.newInstance(Permissao.class)));
     }
 
     @Override
-    public Permissao salvarPermissao(Permissao permissao) {
-        try {
-            return salvar(queryInserir, permissao, "id_permissao");
-        } catch (Exception ex) {
-            throw tratarErro("Erro ao salvar permissão", ex);
-        }
+    public Permissao salvarPermissao(Permissao entidade) {
+        return executor.executar("Salvar permissão", () -> {
+            entidade.setId(JdbcSuporte.inserir(jdbc, qInserir, new BeanPropertySqlParameterSource(entidade), "id_permissao"));
+            return entidade;
+        });
     }
 
     @Override
-    public Permissao alterarPermissao(Permissao permissao) {
-        try {
-            return alterar(queryAlterar, permissao);
-        } catch (Exception ex) {
-            throw tratarErro("Erro ao alterar permissão", ex);
-        }
+    public Permissao alterarPermissao(Permissao entidade) {
+        return executor.executar("Alterar permissão", () -> {
+            jdbc.update(qAlterar, new BeanPropertySqlParameterSource(entidade));
+            return entidade;
+        });
     }
 
     @Override
     public void deletarPermissao(Long id) {
-        try {
-            deletar(queryDeletar, new MapSqlParameterSource("id", id));
-        } catch (Exception ex) {
-            throw tratarErro("Erro ao deletar permissão", ex);
-        }
-    }
-
-    private ValidacaoException tratarErro(String mensagem, Exception ex) {
-        log.error(mensagem, ex);
-        return new ValidacaoException(NordHttpEnum.HTTP_400, mensagem, ExceptionUtils.getMessage(ex));
+        executor.executar("Excluir permissão", () -> jdbc.update(qDeletar, new MapSqlParameterSource("id", id)));
     }
 }

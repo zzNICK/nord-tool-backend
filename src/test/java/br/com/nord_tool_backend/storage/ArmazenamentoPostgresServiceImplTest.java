@@ -1,7 +1,7 @@
 package br.com.nord_tool_backend.storage;
 
+import br.com.nord_tool_backend.exception.NordException;
 import br.com.nord_tool_backend.domain.ArquivoArmazenado;
-import br.com.nord_tool_backend.excepetion.ValidacaoException;
 import br.com.nord_tool_backend.repository.ArquivoArmazenadoRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -52,8 +52,8 @@ class ArmazenamentoPostgresServiceImplTest {
 
     @Test
     void naoSalvaArquivoVazio() {
-        assertThrows(ValidacaoException.class, () -> service.salvar("a", "x", new byte[0]));
-        assertThrows(ValidacaoException.class, () -> service.salvar("a", "x", null));
+        assertThrows(NordException.class, () -> service.salvar("a", "x", new byte[0]));
+        assertThrows(NordException.class, () -> service.salvar("a", "x", null));
         verifyNoInteractions(repository);
     }
 
@@ -79,9 +79,9 @@ class ArmazenamentoPostgresServiceImplTest {
     void abrirArquivoInexistenteRetorna404() {
         when(repository.buscarComConteudo(9L)).thenReturn(Optional.empty());
 
-        ValidacaoException ex = assertThrows(ValidacaoException.class, () -> service.abrir(9L));
+        NordException ex = assertThrows(NordException.class, () -> service.abrir(9L));
 
-        assertEquals(404, ex.getHttpEnum().getStatus().value());
+        assertEquals(404, ex.getStatus().getStatus().value());
     }
 
     @Test

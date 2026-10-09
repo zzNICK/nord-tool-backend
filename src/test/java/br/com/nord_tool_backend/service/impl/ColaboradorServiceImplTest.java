@@ -1,5 +1,6 @@
 package br.com.nord_tool_backend.service.impl;
 
+import br.com.nord_tool_backend.service.AutorizacaoService;
 import br.com.nord_tool_backend.domain.Colaborador;
 import br.com.nord_tool_backend.dto.ColaboradorDto;
 import br.com.nord_tool_backend.form.ColaboradorForm;
@@ -17,9 +18,17 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import br.com.nord_tool_backend.security.Modulo;
+import br.com.nord_tool_backend.security.Acao;
+import br.com.nord_tool_backend.exception.AcessoNegadoException;
+import br.com.nord_tool_backend.exception.NaoAutenticadoException;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 class ColaboradorServiceImplTest {
+
+    private final AutorizacaoService autorizacao = org.mockito.Mockito.mock(AutorizacaoService.class);
     @Mock
     private ColaboradorRepository repository;
 
@@ -30,7 +39,7 @@ class ColaboradorServiceImplTest {
 
     @BeforeEach
     void setup() {
-        service = new ColaboradorServiceImpl(repository);
+        service = new ColaboradorServiceImpl(repository, autorizacao);
         colaboradorForm = ColaboradorForm.builder()
                 .nmColaborador("João Silva")
                 .nrCelular("11999999999")
@@ -81,5 +90,21 @@ class ColaboradorServiceImplTest {
     void deveListarColaboradores() {
         when(repository.listarColaboradores()).thenReturn(Collections.singletonList(colaborador));
         assertEquals(Collections.singletonList(dto), service.listarColaboradores());
+    }
+
+    // ---------- autorização ----------
+
+    @Test
+    void semAutenticacaoNaoConsultaODado() {
+        when(autorizacao.exigirAutenticado()).thenThrow(new NaoAutenticadoException("Autenticação necessária"));
+        assertThrows(NaoAutenticadoException.class, () -> service.listarColaboradores());
+        verifyNoInteractions(repository);
+    }
+
+    @Test
+    void semPermissaoDeEscritaDoModuloNaoAlteraODado() {
+        when(autorizacao.exigir(Modulo.CADASTROS, Acao.ESCRITA)).thenThrow(new AcessoNegadoException("Acesso negado"));
+        assertThrows(AcessoNegadoException.class, () -> service.deletarColaborador(1L));
+        verifyNoInteractions(repository);
     }
 }

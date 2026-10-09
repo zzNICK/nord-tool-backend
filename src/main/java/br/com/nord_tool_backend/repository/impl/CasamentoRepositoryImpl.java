@@ -1,18 +1,13 @@
 package br.com.nord_tool_backend.repository.impl;
 
-import br.com.nord_tool_backend.controller.response.NordHttpEnum;
 import br.com.nord_tool_backend.domain.CasamentoAnexo;
 import br.com.nord_tool_backend.domain.CasamentoConvidado;
 import br.com.nord_tool_backend.domain.CasamentoFornecedor;
 import br.com.nord_tool_backend.domain.CasamentoMarco;
 import br.com.nord_tool_backend.dto.CasamentoTotaisDto;
-import br.com.nord_tool_backend.excepetion.ValidacaoException;
 import br.com.nord_tool_backend.repository.CasamentoRepository;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.exception.ExceptionUtils;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.PropertySource;
+import br.com.nord_tool_backend.repository.jdbc.JdbcExecutor;
+import br.com.nord_tool_backend.repository.jdbc.SqlQueries;
 import org.springframework.jdbc.core.BeanPropertyRowMapper;
 import org.springframework.jdbc.core.namedparam.BeanPropertySqlParameterSource;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -26,50 +21,79 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.function.Supplier;
 
-@Repository @Slf4j @RequiredArgsConstructor
-@PropertySource("classpath:query/casamento.properties")
+@Repository
 public class CasamentoRepositoryImpl implements CasamentoRepository {
 
     private final NamedParameterJdbcTemplate jdbc;
+    private final JdbcExecutor executor;
 
-    @Value("${SPS.CASAMENTO.CONFIGURACAO.LISTAR}") private String qConfigListar;
-    @Value("${SPI.CASAMENTO.CONFIGURACAO.SALVAR}") private String qConfigSalvar;
+    private final String qConfigListar;
+    private final String qConfigSalvar;
 
-    @Value("${SPS.CASAMENTO.FORNECEDOR.LISTAR}") private String qFornecedorListar;
-    @Value("${SPS.CASAMENTO.FORNECEDOR.BUSCAR}") private String qFornecedorBuscar;
-    @Value("${SPI.CASAMENTO.FORNECEDOR.INSERIR}") private String qFornecedorInserir;
-    @Value("${SPU.CASAMENTO.FORNECEDOR.ALTERAR}") private String qFornecedorAlterar;
-    @Value("${SPD.CASAMENTO.FORNECEDOR.DELETAR}") private String qFornecedorDeletar;
+    private final String qFornecedorListar;
+    private final String qFornecedorBuscar;
+    private final String qFornecedorInserir;
+    private final String qFornecedorAlterar;
+    private final String qFornecedorDeletar;
 
-    @Value("${SPS.CASAMENTO.ANEXO.LISTAR}") private String qAnexoListar;
-    @Value("${SPS.CASAMENTO.ANEXO.BUSCAR}") private String qAnexoBuscar;
-    @Value("${SPI.CASAMENTO.ANEXO.INSERIR}") private String qAnexoInserir;
-    @Value("${SPD.CASAMENTO.ANEXO.DELETAR}") private String qAnexoDeletar;
+    private final String qAnexoListar;
+    private final String qAnexoBuscar;
+    private final String qAnexoInserir;
+    private final String qAnexoDeletar;
 
-    @Value("${SPS.CASAMENTO.CONVIDADO.LISTAR}") private String qConvidadoListar;
-    @Value("${SPS.CASAMENTO.CONVIDADO.BUSCAR}") private String qConvidadoBuscar;
-    @Value("${SPI.CASAMENTO.CONVIDADO.INSERIR}") private String qConvidadoInserir;
-    @Value("${SPU.CASAMENTO.CONVIDADO.ALTERAR}") private String qConvidadoAlterar;
-    @Value("${SPD.CASAMENTO.CONVIDADO.DELETAR}") private String qConvidadoDeletar;
+    private final String qConvidadoListar;
+    private final String qConvidadoBuscar;
+    private final String qConvidadoInserir;
+    private final String qConvidadoAlterar;
+    private final String qConvidadoDeletar;
 
-    @Value("${SPS.CASAMENTO.MARCO.LISTAR}") private String qMarcoListar;
-    @Value("${SPS.CASAMENTO.MARCO.BUSCAR}") private String qMarcoBuscar;
-    @Value("${SPS.CASAMENTO.MARCO.PROXIMOS}") private String qMarcoProximos;
-    @Value("${SPS.CASAMENTO.MARCO.CONTAR}") private String qMarcoContar;
-    @Value("${SPI.CASAMENTO.MARCO.INSERIR}") private String qMarcoInserir;
-    @Value("${SPU.CASAMENTO.MARCO.ALTERAR}") private String qMarcoAlterar;
-    @Value("${SPU.CASAMENTO.MARCO.CONCLUIR}") private String qMarcoConcluir;
-    @Value("${SPD.CASAMENTO.MARCO.DELETAR}") private String qMarcoDeletar;
+    private final String qMarcoListar;
+    private final String qMarcoBuscar;
+    private final String qMarcoProximos;
+    private final String qMarcoContar;
+    private final String qMarcoInserir;
+    private final String qMarcoAlterar;
+    private final String qMarcoConcluir;
+    private final String qMarcoDeletar;
 
-    @Value("${SPS.CASAMENTO.DASHBOARD.TOTAIS}") private String qTotais;
+    private final String qTotais;
+
+    public CasamentoRepositoryImpl(NamedParameterJdbcTemplate jdbc, JdbcExecutor executor, SqlQueries queries) {
+        this.jdbc = jdbc;
+        this.executor = executor;
+        this.qConfigListar = queries.get("SPS.CASAMENTO.CONFIGURACAO.LISTAR");
+        this.qConfigSalvar = queries.get("SPI.CASAMENTO.CONFIGURACAO.SALVAR");
+        this.qFornecedorListar = queries.get("SPS.CASAMENTO.FORNECEDOR.LISTAR");
+        this.qFornecedorBuscar = queries.get("SPS.CASAMENTO.FORNECEDOR.BUSCAR");
+        this.qFornecedorInserir = queries.get("SPI.CASAMENTO.FORNECEDOR.INSERIR");
+        this.qFornecedorAlterar = queries.get("SPU.CASAMENTO.FORNECEDOR.ALTERAR");
+        this.qFornecedorDeletar = queries.get("SPD.CASAMENTO.FORNECEDOR.DELETAR");
+        this.qAnexoListar = queries.get("SPS.CASAMENTO.ANEXO.LISTAR");
+        this.qAnexoBuscar = queries.get("SPS.CASAMENTO.ANEXO.BUSCAR");
+        this.qAnexoInserir = queries.get("SPI.CASAMENTO.ANEXO.INSERIR");
+        this.qAnexoDeletar = queries.get("SPD.CASAMENTO.ANEXO.DELETAR");
+        this.qConvidadoListar = queries.get("SPS.CASAMENTO.CONVIDADO.LISTAR");
+        this.qConvidadoBuscar = queries.get("SPS.CASAMENTO.CONVIDADO.BUSCAR");
+        this.qConvidadoInserir = queries.get("SPI.CASAMENTO.CONVIDADO.INSERIR");
+        this.qConvidadoAlterar = queries.get("SPU.CASAMENTO.CONVIDADO.ALTERAR");
+        this.qConvidadoDeletar = queries.get("SPD.CASAMENTO.CONVIDADO.DELETAR");
+        this.qMarcoListar = queries.get("SPS.CASAMENTO.MARCO.LISTAR");
+        this.qMarcoBuscar = queries.get("SPS.CASAMENTO.MARCO.BUSCAR");
+        this.qMarcoProximos = queries.get("SPS.CASAMENTO.MARCO.PROXIMOS");
+        this.qMarcoContar = queries.get("SPS.CASAMENTO.MARCO.CONTAR");
+        this.qMarcoInserir = queries.get("SPI.CASAMENTO.MARCO.INSERIR");
+        this.qMarcoAlterar = queries.get("SPU.CASAMENTO.MARCO.ALTERAR");
+        this.qMarcoConcluir = queries.get("SPU.CASAMENTO.MARCO.CONCLUIR");
+        this.qMarcoDeletar = queries.get("SPD.CASAMENTO.MARCO.DELETAR");
+        this.qTotais = queries.get("SPS.CASAMENTO.DASHBOARD.TOTAIS");
+    }
 
     // ---------- configuração ----------
 
     @Override
     public Map<String, String> listarConfiguracao() {
-        return executar("Erro ao ler a configuração do casamento", () -> {
+        return executor.executar("Erro ao ler a configuração do casamento", () -> {
             Map<String, String> mapa = new HashMap<>();
             jdbc.query(qConfigListar, rs -> {
                 mapa.put(rs.getString("cdChave"), rs.getString("vlValor"));
@@ -80,7 +104,7 @@ public class CasamentoRepositoryImpl implements CasamentoRepository {
 
     @Override
     public void salvarConfiguracao(String chave, String valor) {
-        executar("Erro ao salvar a configuração do casamento", () ->
+        executor.executar("Erro ao salvar a configuração do casamento", () ->
                 jdbc.update(qConfigSalvar, new MapSqlParameterSource().addValue("cdChave", chave).addValue("vlValor", valor)));
     }
 
@@ -88,114 +112,114 @@ public class CasamentoRepositoryImpl implements CasamentoRepository {
 
     @Override
     public List<CasamentoFornecedor> listarFornecedores() {
-        return executar("Erro ao listar fornecedores", () ->
+        return executor.executar("Erro ao listar fornecedores", () ->
                 jdbc.query(qFornecedorListar, BeanPropertyRowMapper.newInstance(CasamentoFornecedor.class)));
     }
 
     @Override
     public Optional<CasamentoFornecedor> buscarFornecedor(Long id) {
-        return executar("Erro ao buscar fornecedor", () ->
+        return executor.executar("Erro ao buscar fornecedor", () ->
                 jdbc.query(qFornecedorBuscar, new MapSqlParameterSource("id", id),
                         BeanPropertyRowMapper.newInstance(CasamentoFornecedor.class)).stream().findFirst());
     }
 
     @Override
     public Long inserirFornecedor(CasamentoFornecedor f) {
-        return executar("Erro ao salvar fornecedor", () -> inserir(qFornecedorInserir, new BeanPropertySqlParameterSource(f), "id_fornecedor"));
+        return executor.executar("Erro ao salvar fornecedor", () -> inserir(qFornecedorInserir, new BeanPropertySqlParameterSource(f), "id_fornecedor"));
     }
 
     @Override
     public void alterarFornecedor(CasamentoFornecedor f) {
-        executar("Erro ao alterar fornecedor", () -> jdbc.update(qFornecedorAlterar, new BeanPropertySqlParameterSource(f)));
+        executor.executar("Erro ao alterar fornecedor", () -> jdbc.update(qFornecedorAlterar, new BeanPropertySqlParameterSource(f)));
     }
 
     @Override
     public void deletarFornecedor(Long id) {
-        executar("Erro ao excluir fornecedor", () -> jdbc.update(qFornecedorDeletar, new MapSqlParameterSource("id", id)));
+        executor.executar("Erro ao excluir fornecedor", () -> jdbc.update(qFornecedorDeletar, new MapSqlParameterSource("id", id)));
     }
 
     // ---------- anexos ----------
 
     @Override
     public List<CasamentoAnexo> listarAnexos(Long idFornecedor) {
-        return executar("Erro ao listar anexos", () ->
+        return executor.executar("Erro ao listar anexos", () ->
                 jdbc.query(qAnexoListar, new MapSqlParameterSource("idFornecedor", idFornecedor),
                         BeanPropertyRowMapper.newInstance(CasamentoAnexo.class)));
     }
 
     @Override
     public Optional<CasamentoAnexo> buscarAnexo(Long idAnexo) {
-        return executar("Erro ao buscar anexo", () ->
+        return executor.executar("Erro ao buscar anexo", () ->
                 jdbc.query(qAnexoBuscar, new MapSqlParameterSource("id", idAnexo),
                         BeanPropertyRowMapper.newInstance(CasamentoAnexo.class)).stream().findFirst());
     }
 
     @Override
     public Long inserirAnexo(Long idFornecedor, Long idArquivo, String descricao) {
-        return executar("Erro ao salvar anexo", () -> inserir(qAnexoInserir, new MapSqlParameterSource()
+        return executor.executar("Erro ao salvar anexo", () -> inserir(qAnexoInserir, new MapSqlParameterSource()
                 .addValue("idFornecedor", idFornecedor).addValue("idArquivo", idArquivo).addValue("txDescricao", descricao), "id_anexo"));
     }
 
     @Override
     public void deletarAnexo(Long idAnexo) {
-        executar("Erro ao excluir anexo", () -> jdbc.update(qAnexoDeletar, new MapSqlParameterSource("id", idAnexo)));
+        executor.executar("Erro ao excluir anexo", () -> jdbc.update(qAnexoDeletar, new MapSqlParameterSource("id", idAnexo)));
     }
 
     // ---------- convidados ----------
 
     @Override
     public List<CasamentoConvidado> listarConvidados() {
-        return executar("Erro ao listar convidados", () ->
+        return executor.executar("Erro ao listar convidados", () ->
                 jdbc.query(qConvidadoListar, BeanPropertyRowMapper.newInstance(CasamentoConvidado.class)));
     }
 
     @Override
     public Optional<CasamentoConvidado> buscarConvidado(Long id) {
-        return executar("Erro ao buscar convidado", () ->
+        return executor.executar("Erro ao buscar convidado", () ->
                 jdbc.query(qConvidadoBuscar, new MapSqlParameterSource("id", id),
                         BeanPropertyRowMapper.newInstance(CasamentoConvidado.class)).stream().findFirst());
     }
 
     @Override
     public Long inserirConvidado(CasamentoConvidado c) {
-        return executar("Erro ao salvar convidado", () -> inserir(qConvidadoInserir, new BeanPropertySqlParameterSource(c), "id_convidado"));
+        return executor.executar("Erro ao salvar convidado", () -> inserir(qConvidadoInserir, new BeanPropertySqlParameterSource(c), "id_convidado"));
     }
 
     @Override
     public void alterarConvidado(CasamentoConvidado c) {
-        executar("Erro ao alterar convidado", () -> jdbc.update(qConvidadoAlterar, new BeanPropertySqlParameterSource(c)));
+        executor.executar("Erro ao alterar convidado", () -> jdbc.update(qConvidadoAlterar, new BeanPropertySqlParameterSource(c)));
     }
 
     @Override
     public void deletarConvidado(Long id) {
-        executar("Erro ao excluir convidado", () -> jdbc.update(qConvidadoDeletar, new MapSqlParameterSource("id", id)));
+        executor.executar("Erro ao excluir convidado", () -> jdbc.update(qConvidadoDeletar, new MapSqlParameterSource("id", id)));
     }
 
     // ---------- marcos ----------
 
     @Override
     public List<CasamentoMarco> listarMarcos() {
-        return executar("Erro ao listar marcos", () ->
+        return executor.executar("Erro ao listar marcos", () ->
                 jdbc.query(qMarcoListar, BeanPropertyRowMapper.newInstance(CasamentoMarco.class)));
     }
 
     @Override
     public List<CasamentoMarco> listarProximosMarcos(int limite) {
-        return executar("Erro ao listar os próximos marcos", () ->
+        return executor.executar("Erro ao listar os próximos marcos", () ->
                 jdbc.query(qMarcoProximos, new MapSqlParameterSource("limite", limite),
                         BeanPropertyRowMapper.newInstance(CasamentoMarco.class)));
     }
 
     @Override
     public Optional<CasamentoMarco> buscarMarco(Long id) {
-        return executar("Erro ao buscar marco", () ->
+        return executor.executar("Erro ao buscar marco", () ->
                 jdbc.query(qMarcoBuscar, new MapSqlParameterSource("id", id),
                         BeanPropertyRowMapper.newInstance(CasamentoMarco.class)).stream().findFirst());
     }
 
     @Override
     public int contarMarcos() {
-        return executar("Erro ao contar marcos", () -> {
+        return executor.executar("Erro ao contar marcos", () -> {
             Integer total = jdbc.queryForObject(qMarcoContar, new MapSqlParameterSource(), Integer.class);
             return total == null ? 0 : total;
         });
@@ -203,7 +227,7 @@ public class CasamentoRepositoryImpl implements CasamentoRepository {
 
     @Override
     public Long inserirMarco(CasamentoMarco m) {
-        return executar("Erro ao salvar marco", () -> inserir(qMarcoInserir, new MapSqlParameterSource()
+        return executor.executar("Erro ao salvar marco", () -> inserir(qMarcoInserir, new MapSqlParameterSource()
                 .addValue("nmTitulo", m.getNmTitulo())
                 .addValue("dtPrazo", m.getDtPrazo() == null ? null : Date.valueOf(m.getDtPrazo()))
                 .addValue("inConcluido", Boolean.TRUE.equals(m.getInConcluido()))
@@ -212,7 +236,7 @@ public class CasamentoRepositoryImpl implements CasamentoRepository {
 
     @Override
     public void alterarMarco(CasamentoMarco m) {
-        executar("Erro ao alterar marco", () -> jdbc.update(qMarcoAlterar, new MapSqlParameterSource()
+        executor.executar("Erro ao alterar marco", () -> jdbc.update(qMarcoAlterar, new MapSqlParameterSource()
                 .addValue("id", m.getId())
                 .addValue("nmTitulo", m.getNmTitulo())
                 .addValue("dtPrazo", m.getDtPrazo() == null ? null : Date.valueOf(m.getDtPrazo()))
@@ -221,20 +245,20 @@ public class CasamentoRepositoryImpl implements CasamentoRepository {
 
     @Override
     public void concluirMarco(Long id, boolean concluido) {
-        executar("Erro ao atualizar o marco", () -> jdbc.update(qMarcoConcluir,
+        executor.executar("Erro ao atualizar o marco", () -> jdbc.update(qMarcoConcluir,
                 new MapSqlParameterSource().addValue("id", id).addValue("inConcluido", concluido)));
     }
 
     @Override
     public void deletarMarco(Long id) {
-        executar("Erro ao excluir marco", () -> jdbc.update(qMarcoDeletar, new MapSqlParameterSource("id", id)));
+        executor.executar("Erro ao excluir marco", () -> jdbc.update(qMarcoDeletar, new MapSqlParameterSource("id", id)));
     }
 
     // ---------- dashboard ----------
 
     @Override
     public CasamentoTotaisDto buscarTotais() {
-        return executar("Erro ao calcular os totais do casamento", () ->
+        return executor.executar("Erro ao calcular os totais do casamento", () ->
                 jdbc.queryForObject(qTotais, new MapSqlParameterSource(), BeanPropertyRowMapper.newInstance(CasamentoTotaisDto.class)));
     }
 
@@ -244,16 +268,5 @@ public class CasamentoRepositoryImpl implements CasamentoRepository {
         KeyHolder keys = new GeneratedKeyHolder();
         jdbc.update(sql, params, keys, new String[]{colunaId});
         return keys.getKey().longValue();
-    }
-
-    private <T> T executar(String mensagem, Supplier<T> acao) {
-        try {
-            return acao.get();
-        } catch (ValidacaoException ex) {
-            throw ex;
-        } catch (Exception ex) {
-            log.error(mensagem, ex);
-            throw new ValidacaoException(NordHttpEnum.HTTP_400, mensagem, ExceptionUtils.getRootCauseMessage(ex));
-        }
     }
 }

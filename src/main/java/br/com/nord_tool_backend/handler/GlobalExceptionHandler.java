@@ -2,11 +2,12 @@ package br.com.nord_tool_backend.handler;
 
 import br.com.nord_tool_backend.controller.response.ApiResponseBody;
 import br.com.nord_tool_backend.controller.response.NordHttpEnum;
-import br.com.nord_tool_backend.excepetion.ValidacaoException;
 import br.com.nord_tool_backend.exception.FalhaInternaException;
+import br.com.nord_tool_backend.exception.LimiteRequisicoesException;
 import br.com.nord_tool_backend.exception.NordException;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
@@ -44,12 +45,16 @@ public class GlobalExceptionHandler {
         NordHttpEnum status = ex.getStatus();
         if (status.getStatus().is5xxServerError()) {
             log.error("{} [{}]", ex.getMessage(), status.getStatus().value(), ex);
-        } else if (ex instanceof ValidacaoException && ((ValidacaoException) ex).getException() != null) {
-            log.warn("{} ({}): {}", ex.getMessage(), status.getStatus().value(), ((ValidacaoException) ex).getException());
         } else if (ex.getCause() != null) {
             log.warn("{} ({})", ex.getMessage(), status.getStatus().value(), ex.getCause());
         }
-        return responder(status, ex.getCdErro(), ex.getMessage());
+        ResponseEntity<ApiResponseBody<String>> resposta = responder(status, ex.getCdErro(), ex.getMessage());
+        if (ex instanceof LimiteRequisicoesException) {
+            return ResponseEntity.status(status.getStatus())
+                    .header(HttpHeaders.RETRY_AFTER, "60")
+                    .body(resposta.getBody());
+        }
+        return resposta;
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

@@ -1,18 +1,20 @@
 package br.com.nord_tool_backend.security;
 
+import java.time.Duration;
 import java.time.Instant;
-import java.util.List;
 import java.util.Optional;
 
-/** Emissão e validação dos tokens de acesso (JWT). */
+/** Emissão e validação dos tokens de acesso (JWT HS256 com kid, iss/aud, auth_time e versão de sessão). */
 public interface JwtService {
 
-    long getInactivityMinutes();
+    /** Duração do token de acesso. */
+    Duration getDuracaoToken();
 
-    Instant calcularExpiracao(Instant agora);
+    /** Tempo máximo de uma sessão desde o login, somando as renovações. */
+    Duration getDuracaoMaximaSessao();
 
-    String gerar(Long idUsuario, String email, String perfil, List<String> permissoes, Instant agora);
+    TokenEmitido emitir(UsuarioAutenticado usuario, Instant agora);
 
-    /** Devolve o principal se o token for válido e não estiver expirado. */
+    /** Devolve o principal se a assinatura, o emissor, o público, o tipo e a validade conferirem. */
     Optional<UsuarioAutenticado> validar(String token);
 }

@@ -1,10 +1,9 @@
 package br.com.nord_tool_backend.handler;
 
-import br.com.nord_tool_backend.controller.response.NordHttpEnum;
+import br.com.nord_tool_backend.exception.EntradaInvalidaException;
 import br.com.nord_tool_backend.domain.ApartamentoVistoria;
 import br.com.nord_tool_backend.domain.enums.DiaSemanaEnum;
 import br.com.nord_tool_backend.domain.enums.StatusVistoriaEnum;
-import br.com.nord_tool_backend.excepetion.ValidacaoException;
 import br.com.nord_tool_backend.repository.ApartamentoVistoriaRepository;
 import br.com.nord_tool_backend.utils.StringUtils;
 import lombok.RequiredArgsConstructor;
@@ -50,7 +49,7 @@ public class XlsxExtractorHandlerApartamento extends StringUtils {
                     log.info("Finalizando montagem dos dados da planilha para o objeto");
                 } catch (Exception ex) {
                     log.error(ExceptionUtils.getMessage(ex));
-                    throw new ValidacaoException(NordHttpEnum.HTTP_400, ERRO_LINHA_PLANILHA + (i + 1), ex.getMessage());
+                    throw new EntradaInvalidaException(ERRO_LINHA_PLANILHA + (i + 1), ex);
                 }
             }
         }
@@ -82,7 +81,7 @@ public class XlsxExtractorHandlerApartamento extends StringUtils {
                     .build();
         } catch (Exception ex) {
             log.error(ExceptionUtils.getMessage(ex));
-            throw new ValidacaoException(NordHttpEnum.HTTP_400, ERRO_MONTAGEM_PLANILHA_TO_OBJ, ex.getMessage());
+            throw new EntradaInvalidaException(ERRO_MONTAGEM_PLANILHA_TO_OBJ, ex);
         }
     }
 }

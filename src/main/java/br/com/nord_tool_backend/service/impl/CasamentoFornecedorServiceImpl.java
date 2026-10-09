@@ -1,12 +1,15 @@
 package br.com.nord_tool_backend.service.impl;
 
-import br.com.nord_tool_backend.controller.response.NordHttpEnum;
+import br.com.nord_tool_backend.security.Acao;
+import br.com.nord_tool_backend.security.Modulo;
+import br.com.nord_tool_backend.service.AutorizacaoService;
+import br.com.nord_tool_backend.exception.NaoEncontradoException;
+import br.com.nord_tool_backend.exception.EntradaInvalidaException;
 import br.com.nord_tool_backend.domain.CasamentoAnexo;
 import br.com.nord_tool_backend.domain.CasamentoFornecedor;
 import br.com.nord_tool_backend.domain.enums.StatusFornecedorEnum;
 import br.com.nord_tool_backend.dto.CasamentoAnexoDto;
 import br.com.nord_tool_backend.dto.CasamentoFornecedorDto;
-import br.com.nord_tool_backend.excepetion.ValidacaoException;
 import br.com.nord_tool_backend.form.CasamentoFornecedorForm;
 import br.com.nord_tool_backend.repository.CasamentoRepository;
 import br.com.nord_tool_backend.service.CasamentoFornecedorService;
@@ -27,25 +30,31 @@ import java.util.stream.Collectors;
 public class CasamentoFornecedorServiceImpl implements CasamentoFornecedorService {
 
     static final int MAX_DESCRICAO = 200;
+    static final int MAX_ANEXOS_POR_FORNECEDOR = 20;
 
     private final CasamentoRepository repository;
     private final ArmazenamentoService armazenamento;
 
+    private final AutorizacaoService autorizacao;
+
     @Override
     @Transactional(readOnly = true)
     public List<CasamentoFornecedorDto> listar() {
+        autorizacao.exigir(Modulo.CASAMENTO, Acao.LEITURA);
         return repository.listarFornecedores().stream().map(CasamentoFornecedorDto::de).collect(Collectors.toList());
     }
 
     @Override
     @Transactional(readOnly = true)
     public CasamentoFornecedorDto buscar(Long id) {
+        autorizacao.exigir(Modulo.CASAMENTO, Acao.LEITURA);
         return CasamentoFornecedorDto.de(fornecedor(id));
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public CasamentoFornecedorDto criar(CasamentoFornecedorForm form) {
+        autorizacao.exigir(Modulo.CASAMENTO, Acao.ESCRITA);
         Long id = repository.inserirFornecedor(converter(form));
         return CasamentoFornecedorDto.de(fornecedor(id));
     }
@@ -53,6 +62,7 @@ public class CasamentoFornecedorServiceImpl implements CasamentoFornecedorServic
     @Override
     @Transactional(rollbackFor = Exception.class)
     public CasamentoFornecedorDto alterar(Long id, CasamentoFornecedorForm form) {
+        autorizacao.exigir(Modulo.CASAMENTO, Acao.ESCRITA);
         fornecedor(id);
         CasamentoFornecedor novo = converter(form);
         novo.setId(id);
@@ -63,6 +73,7 @@ public class CasamentoFornecedorServiceImpl implements CasamentoFornecedorServic
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void deletar(Long id) {
+        autorizacao.exigir(Modulo.CASAMENTO, Acao.ESCRITA);
         fornecedor(id);
         List<Long> arquivos = repository.listarAnexos(id).stream()
                 .map(CasamentoAnexo::getIdArquivo).collect(Collectors.toList());
@@ -76,6 +87,7 @@ public class CasamentoFornecedorServiceImpl implements CasamentoFornecedorServic
     @Override
     @Transactional(readOnly = true)
     public List<CasamentoAnexoDto> listarAnexos(Long idFornecedor) {
+        autorizacao.exigir(Modulo.CASAMENTO, Acao.LEITURA);
         fornecedor(idFornecedor);
         return repository.listarAnexos(idFornecedor).stream().map(CasamentoAnexoDto::de).collect(Collectors.toList());
     }
@@ -83,11 +95,15 @@ public class CasamentoFornecedorServiceImpl implements CasamentoFornecedorServic
     @Override
     @Transactional(rollbackFor = Exception.class)
     public CasamentoAnexoDto anexar(Long idFornecedor, String nomeArquivo, byte[] bytes, String descricao) {
+        autorizacao.exigir(Modulo.CASAMENTO, Acao.ESCRITA);
         fornecedor(idFornecedor);
+        if (repository.listarAnexos(idFornecedor).size() >= MAX_ANEXOS_POR_FORNECEDOR) {
+            throw new EntradaInvalidaException("O fornecedor já tem o máximo de " + MAX_ANEXOS_POR_FORNECEDOR + " anexos");
+        }
         String contentType = ArquivoValidador.validarContrato(nomeArquivo, bytes);
         String texto = descricao == null || descricao.trim().isEmpty() ? null : descricao.trim();
         if (texto != null && texto.length() > MAX_DESCRICAO) {
-            throw new ValidacaoException(NordHttpEnum.HTTP_400, "A descrição deve ter no máximo " + MAX_DESCRICAO + " caracteres", null);
+            throw new EntradaInvalidaException("A descrição deve ter no máximo " + MAX_DESCRICAO + " caracteres");
         }
         Long idArquivo = armazenamento.salvar(nomeArquivo, contentType, bytes);
         Long idAnexo = repository.inserirAnexo(idFornecedor, idArquivo, texto);
@@ -97,6 +113,7 @@ public class CasamentoFornecedorServiceImpl implements CasamentoFornecedorServic
     @Override
     @Transactional(readOnly = true)
     public ArquivoDownload baixarAnexo(Long idAnexo) {
+        autorizacao.exigir(Modulo.CASAMENTO, Acao.LEITURA);
         CasamentoAnexo anexo = anexo(idAnexo);
         long versao = anexo.getDhCriacao() == null ? 0L
                 : anexo.getDhCriacao().atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
@@ -106,6 +123,7 @@ public class CasamentoFornecedorServiceImpl implements CasamentoFornecedorServic
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void excluirAnexo(Long idAnexo) {
+        autorizacao.exigir(Modulo.CASAMENTO, Acao.ESCRITA);
         CasamentoAnexo anexo = anexo(idAnexo);
         repository.deletarAnexo(idAnexo);
         armazenamento.apagar(anexo.getIdArquivo());
@@ -115,19 +133,18 @@ public class CasamentoFornecedorServiceImpl implements CasamentoFornecedorServic
 
     private CasamentoFornecedor fornecedor(Long id) {
         return repository.buscarFornecedor(id)
-                .orElseThrow(() -> new ValidacaoException(NordHttpEnum.HTTP_404, "Fornecedor não encontrado", null));
+                .orElseThrow(() -> new NaoEncontradoException("Fornecedor não encontrado"));
     }
 
     private CasamentoAnexo anexo(Long id) {
         return repository.buscarAnexo(id)
-                .orElseThrow(() -> new ValidacaoException(NordHttpEnum.HTTP_404, "Anexo não encontrado", null));
+                .orElseThrow(() -> new NaoEncontradoException("Anexo não encontrado"));
     }
 
     CasamentoFornecedor converter(CasamentoFornecedorForm form) {
         StatusFornecedorEnum status = form.getNmStatus() == null || form.getNmStatus().trim().isEmpty()
                 ? StatusFornecedorEnum.PESQUISANDO
-                : StatusFornecedorEnum.de(form.getNmStatus()).orElseThrow(() -> new ValidacaoException(
-                        NordHttpEnum.HTTP_400, "Status inválido. Use PESQUISANDO, ORCAMENTO ou CONTRATADO.", null));
+                : StatusFornecedorEnum.de(form.getNmStatus()).orElseThrow(() -> new EntradaInvalidaException("Status inválido. Use PESQUISANDO, ORCAMENTO ou CONTRATADO."));
         CasamentoFornecedor f = new CasamentoFornecedor();
         f.setNmFornecedor(form.getNmFornecedor().trim());
         f.setNmCategoria(form.getNmCategoria().trim());

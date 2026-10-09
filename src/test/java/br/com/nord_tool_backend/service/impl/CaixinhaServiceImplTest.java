@@ -1,5 +1,7 @@
 package br.com.nord_tool_backend.service.impl;
 
+import br.com.nord_tool_backend.service.AutorizacaoService;
+import br.com.nord_tool_backend.exception.NordException;
 import br.com.nord_tool_backend.controller.response.NordHttpEnum;
 import br.com.nord_tool_backend.domain.CaixinhaComprovante;
 import br.com.nord_tool_backend.domain.CaixinhaFiltro;
@@ -8,7 +10,6 @@ import br.com.nord_tool_backend.domain.CaixinhaResponsavel;
 import br.com.nord_tool_backend.dto.CaixinhaComprovanteDto;
 import br.com.nord_tool_backend.dto.CaixinhaLancamentoDto;
 import br.com.nord_tool_backend.dto.CaixinhaResumoDto;
-import br.com.nord_tool_backend.excepetion.ValidacaoException;
 import br.com.nord_tool_backend.form.CaixinhaLancamentoForm;
 import br.com.nord_tool_backend.form.CaixinhaMarcacaoForm;
 import br.com.nord_tool_backend.form.CaixinhaResponsavelForm;
@@ -35,8 +36,26 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import br.com.nord_tool_backend.dto.*;
+import org.junit.jupiter.api.Nested;
+import br.com.nord_tool_backend.security.Modulo;
+import br.com.nord_tool_backend.security.Acao;
+import br.com.nord_tool_backend.exception.AcessoNegadoException;
+import br.com.nord_tool_backend.exception.NaoAutenticadoException;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verifyNoInteractions;
+import br.com.nord_tool_backend.exception.EntradaInvalidaException;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 class CaixinhaServiceImplTest {
+
+    private final AutorizacaoService autorizacao = org.mockito.Mockito.mock(AutorizacaoService.class);
 
     private static final String UUID1 = "11111111-1111-1111-1111-111111111111";
     private static final String UUID2 = "22222222-2222-2222-2222-222222222222";
@@ -50,7 +69,7 @@ class CaixinhaServiceImplTest {
     void setUp() {
         repository = mock(CaixinhaRepository.class);
         armazenamento = mock(ArmazenamentoService.class);
-        service = new CaixinhaServiceImpl(repository, armazenamento, 5 * 1024 * 1024);
+        service = new CaixinhaServiceImpl(repository, armazenamento, 5 * 1024 * 1024, autorizacao);
     }
 
     private CaixinhaResponsavel responsavel(long id, boolean ativo) {
@@ -87,8 +106,8 @@ class CaixinhaServiceImplTest {
     }
 
     private void esperaErro(NordHttpEnum esperado, Runnable acao) {
-        ValidacaoException ex = assertThrows(ValidacaoException.class, acao::run);
-        assertEquals(esperado, ex.getHttpEnum());
+        NordException ex = assertThrows(NordException.class, acao::run);
+        assertEquals(esperado, ex.getStatus());
     }
 
     // ---------- criação idempotente ----------
@@ -157,10 +176,10 @@ class CaixinhaServiceImplTest {
         CaixinhaLancamentoForm f = form(null);
         f.setNrVersao(2);
 
-        ValidacaoException ex = assertThrows(ValidacaoException.class, () -> service.alterar(5L, f));
+        NordException ex = assertThrows(NordException.class, () -> service.alterar(5L, f));
 
-        assertEquals(NordHttpEnum.HTTP_409, ex.getHttpEnum());
-        assertEquals("O lançamento mudou. Sincronize e tente novamente.", ex.getMenssage());
+        assertEquals(NordHttpEnum.HTTP_409, ex.getStatus());
+        assertEquals("O lançamento mudou. Sincronize e tente novamente.", ex.getMessage());
     }
 
     @Test
@@ -371,5 +390,57 @@ class CaixinhaServiceImplTest {
         when(repository.buscarComprovante(anyLong())).thenReturn(Optional.empty());
         esperaErro(NordHttpEnum.HTTP_404, () -> service.excluirComprovante(1L));
         esperaErro(NordHttpEnum.HTTP_404, () -> service.baixarComprovante(1L));
+    }
+
+    @Nested
+    class CaixinhaResumoJsonTest {
+
+        @Test
+        void resumoSerializaOsNomesQueOFrontendLe() throws Exception {
+            String json = new ObjectMapper().writeValueAsString(
+                    new CaixinhaResumoDto(BigDecimal.TEN, BigDecimal.ONE, new BigDecimal("9"), 2, 1, 1));
+            for (String campo : new String[]{"total", "pago", "aPagar", "qtLancamentos", "qtPagos", "qtPendentes"}) {
+                assertTrue(json.contains("\"" + campo + "\":"), "falta o campo " + campo + " em " + json);
+            }
+            assertFalse(json.contains("\"apagar\""), json);
+        }
+
+        @Test
+        void lancamentoSerializaOsNomesQueOFrontendLe() throws Exception {
+            String json = new ObjectMapper().findAndRegisterModules().writeValueAsString(
+                    new CaixinhaLancamentoDto(1L, java.time.LocalDate.of(2026, 10, 1), 1L, "Ana", "x", BigDecimal.TEN, true, false, 1, 0));
+            for (String campo : new String[]{"idLancamento", "dtLancamento", "idResponsavel", "nmResponsavel", "txInsumo", "vlValor",
+                    "inLancado", "inPago", "nrVersao", "qtComprovantes"}) {
+                assertTrue(json.contains("\"" + campo + "\":"), "falta o campo " + campo + " em " + json);
+            }
+            assertTrue(json.contains("\"dtLancamento\":\"01/10/2026\""), json);
+        }
+    }
+
+    // ---------- cotas e limites ----------
+
+    @Test
+    void comprovanteAcimaDaCotaDoLancamentoEhRecusadoSemGravarArquivo() {
+        when(repository.buscarLancamento(5L)).thenReturn(Optional.of(lancamento(5, 1)));
+        when(repository.listarComprovantes(5L)).thenReturn(Collections.nCopies(
+                CaixinhaServiceImpl.MAX_COMPROVANTES_POR_LANCAMENTO, new CaixinhaComprovante()));
+        assertThrows(EntradaInvalidaException.class, () -> service.anexarComprovante(5L, "c.pdf", PDF, null));
+        verify(armazenamento, never()).salvar(anyString(), anyString(), any());
+    }
+
+    // ---------- autorização ----------
+
+    @Test
+    void semPermissaoDeLeituraDoModuloNaoConsultaODado() {
+        when(autorizacao.exigir(Modulo.CAIXINHA, Acao.LEITURA)).thenThrow(new AcessoNegadoException("Acesso negado"));
+        assertThrows(AcessoNegadoException.class, () -> service.listar(null));
+        verifyNoInteractions(repository);
+    }
+
+    @Test
+    void semPermissaoDeEscritaDoModuloNaoAlteraODado() {
+        when(autorizacao.exigir(Modulo.CAIXINHA, Acao.ESCRITA)).thenThrow(new AcessoNegadoException("Acesso negado"));
+        assertThrows(AcessoNegadoException.class, () -> service.excluir(1L, 1));
+        verifyNoInteractions(repository);
     }
 }

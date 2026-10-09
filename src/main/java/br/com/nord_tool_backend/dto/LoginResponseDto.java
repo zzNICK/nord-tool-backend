@@ -9,7 +9,9 @@ public class LoginResponseDto {
     private String token;
     /** Instante de expiração do token (ISO-8601, UTC). */
     private String expiraEm;
-    /** Minutos de inatividade tolerados antes de o token expirar. */
+    /** Duração do token em minutos (o frontend renova antes de expirar enquanto houver atividade). */
     private long inatividadeMinutos;
+    /** Fim absoluto da sessão (ISO-8601, UTC): depois disso só com novo login. */
+    private String sessaoExpiraEm;
     private UsuarioDto usuario;
 }

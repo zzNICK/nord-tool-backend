@@ -2,23 +2,20 @@ package br.com.nord_tool_backend.controller.write;
 
 import br.com.nord_tool_backend.controller.response.ApiResponseBody;
 import br.com.nord_tool_backend.controller.response.BaseResponse;
-import br.com.nord_tool_backend.controller.response.NordHttpEnum;
 import br.com.nord_tool_backend.dto.LoginResponseDto;
-import br.com.nord_tool_backend.excepetion.ValidacaoException;
 import br.com.nord_tool_backend.form.AlterarSenhaForm;
 import br.com.nord_tool_backend.form.LoginForm;
-import br.com.nord_tool_backend.security.UsuarioAutenticado;
 import br.com.nord_tool_backend.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import javax.servlet.http.HttpServletRequest;
 import javax.validation.Valid;
 
 @RestController
@@ -31,28 +28,21 @@ public class AuthWriteController implements BaseResponse {
 
     @PostMapping("/login")
     @Operation(summary = "Autentica por e-mail e senha e devolve o JWT")
-    public ResponseEntity<ApiResponseBody<LoginResponseDto>> login(@Valid @RequestBody LoginForm form) {
-        return ok(authService.login(form));
+    public ResponseEntity<ApiResponseBody<LoginResponseDto>> login(@Valid @RequestBody LoginForm form,
+                                                                   HttpServletRequest request) {
+        // Atrás de proxy, o IP real vem de X-Forwarded-For via server.forward-headers-strategy (perfil railway).
+        return ok(authService.login(form, request.getRemoteAddr()));
     }
 
     @PostMapping("/refresh")
-    @Operation(summary = "Renova o token (expiração por inatividade)")
-    public ResponseEntity<ApiResponseBody<LoginResponseDto>> refresh(@AuthenticationPrincipal UsuarioAutenticado usuario) {
-        return ok(authService.refresh(exigir(usuario).getId()));
+    @Operation(summary = "Renova o token (versão de sessão e limite absoluto desde o login)")
+    public ResponseEntity<ApiResponseBody<LoginResponseDto>> refresh() {
+        return ok(authService.refresh());
     }
 
     @PostMapping("/alterar-senha")
-    @Operation(summary = "Altera a senha do usuário logado (mínimo 10 caracteres)")
-    public ResponseEntity<ApiResponseBody<Void>> alterarSenha(@AuthenticationPrincipal UsuarioAutenticado usuario,
-                                                              @Valid @RequestBody AlterarSenhaForm form) {
-        authService.alterarSenha(exigir(usuario).getId(), form);
-        return noContent();
-    }
-
-    static UsuarioAutenticado exigir(UsuarioAutenticado usuario) {
-        if (usuario == null) {
-            throw new ValidacaoException(NordHttpEnum.HTTP_401, "Autenticação necessária", null);
-        }
-        return usuario;
+    @Operation(summary = "Altera a senha (10 caracteres a 72 bytes), encerra as outras sessões e devolve token novo")
+    public ResponseEntity<ApiResponseBody<LoginResponseDto>> alterarSenha(@Valid @RequestBody AlterarSenhaForm form) {
+        return ok(authService.alterarSenha(form));
     }
 }

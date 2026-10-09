@@ -17,4 +17,6 @@ public class Usuario extends GlobalDomain {
     private Integer nrFalhasLogin;
     private LocalDateTime dhBloqueadoAte;
     private LocalDateTime dhUltimoLogin;
+    /** Incrementada na troca de senha (e em revogações): tokens com versão anterior deixam de valer. */
+    private Integer nrVersaoSessao;
 }

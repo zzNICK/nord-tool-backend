@@ -1,8 +1,9 @@
 package br.com.nord_tool_backend.service.impl;
 
+import br.com.nord_tool_backend.service.AutorizacaoService;
+import br.com.nord_tool_backend.exception.NordException;
 import br.com.nord_tool_backend.domain.CasamentoMarco;
 import br.com.nord_tool_backend.dto.CasamentoMarcoDto;
-import br.com.nord_tool_backend.excepetion.ValidacaoException;
 import br.com.nord_tool_backend.form.CasamentoMarcoForm;
 import br.com.nord_tool_backend.repository.CasamentoRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -16,8 +17,17 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
+import br.com.nord_tool_backend.security.Modulo;
+import br.com.nord_tool_backend.security.Acao;
+import br.com.nord_tool_backend.exception.AcessoNegadoException;
+import br.com.nord_tool_backend.exception.NaoAutenticadoException;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 class CasamentoMarcoServiceImplTest {
+
+    private final AutorizacaoService autorizacao = org.mockito.Mockito.mock(AutorizacaoService.class);
 
     private CasamentoRepository repository;
     private CasamentoMarcoServiceImpl marcos;
@@ -25,7 +35,7 @@ class CasamentoMarcoServiceImplTest {
     @BeforeEach
     void setUp() {
         repository = mock(CasamentoRepository.class);
-        marcos = new CasamentoMarcoServiceImpl(repository);
+        marcos = new CasamentoMarcoServiceImpl(repository, autorizacao);
     }
 
     private CasamentoMarco marco(long id, boolean concluido) {
@@ -57,7 +67,7 @@ class CasamentoMarcoServiceImplTest {
     void marcosPadraoSoComATabelaVazia() {
         when(repository.contarMarcos()).thenReturn(3);
 
-        assertThrows(ValidacaoException.class, () -> marcos.criarPadrao());
+        assertThrows(NordException.class, () -> marcos.criarPadrao());
         verify(repository, never()).inserirMarco(any());
     }
 
@@ -99,8 +109,24 @@ class CasamentoMarcoServiceImplTest {
     void marcoInexistenteRetorna404() {
         when(repository.buscarMarco(9L)).thenReturn(Optional.empty());
 
-        assertEquals(404, assertThrows(ValidacaoException.class, () -> marcos.buscar(9L)).getHttpEnum().getStatus().value());
-        assertThrows(ValidacaoException.class, () -> marcos.deletar(9L));
-        assertThrows(ValidacaoException.class, () -> marcos.concluir(9L, true));
+        assertEquals(404, assertThrows(NordException.class, () -> marcos.buscar(9L)).getStatus().getStatus().value());
+        assertThrows(NordException.class, () -> marcos.deletar(9L));
+        assertThrows(NordException.class, () -> marcos.concluir(9L, true));
+    }
+
+    // ---------- autorização ----------
+
+    @Test
+    void semPermissaoDeLeituraDoModuloNaoConsultaODado() {
+        when(autorizacao.exigir(Modulo.CASAMENTO, Acao.LEITURA)).thenThrow(new AcessoNegadoException("Acesso negado"));
+        assertThrows(AcessoNegadoException.class, () -> marcos.listar());
+        verifyNoInteractions(repository);
+    }
+
+    @Test
+    void semPermissaoDeEscritaDoModuloNaoAlteraODado() {
+        when(autorizacao.exigir(Modulo.CASAMENTO, Acao.ESCRITA)).thenThrow(new AcessoNegadoException("Acesso negado"));
+        assertThrows(AcessoNegadoException.class, () -> marcos.deletar(1L));
+        verifyNoInteractions(repository);
     }
 }

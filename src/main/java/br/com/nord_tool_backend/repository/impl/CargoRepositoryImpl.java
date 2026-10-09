@@ -1,64 +1,60 @@
 package br.com.nord_tool_backend.repository.impl;
 
-import br.com.nord_tool_backend.controller.response.NordHttpEnum;
 import br.com.nord_tool_backend.domain.Cargo;
-import br.com.nord_tool_backend.excepetion.ValidacaoException;
 import br.com.nord_tool_backend.repository.CargoRepository;
-import br.com.nord_tool_backend.repository.RepositoryJdbcOperationsSql;
-import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.exception.ExceptionUtils;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.PropertySource;
+import br.com.nord_tool_backend.repository.jdbc.JdbcExecutor;
+import br.com.nord_tool_backend.repository.jdbc.JdbcSuporte;
+import br.com.nord_tool_backend.repository.jdbc.SqlQueries;
 import org.springframework.jdbc.core.BeanPropertyRowMapper;
+import org.springframework.jdbc.core.namedparam.BeanPropertySqlParameterSource;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
+
 import java.util.List;
 
-@Repository @Slf4j
-@PropertySource("classpath:query/cargo.properties")
-public class CargoRepositoryImpl extends RepositoryJdbcOperationsSql<Cargo> implements CargoRepository {
-    @Value("${SPS.CARGO.LISTAR}") private String queryListar;
-    @Value("${SPI.CARGO.INSERIR}") private String queryInserir;
-    @Value("${SPU.CARGO.ALTERAR}") private String queryAlterar;
-    @Value("${SPD.CARGO.DELETAR}") private String queryDeletar;
+@Repository
+public class CargoRepositoryImpl implements CargoRepository {
 
+    private final NamedParameterJdbcTemplate jdbc;
+    private final JdbcExecutor executor;
+    private final String qListar;
+    private final String qInserir;
+    private final String qAlterar;
+    private final String qDeletar;
+
+    public CargoRepositoryImpl(NamedParameterJdbcTemplate jdbc, JdbcExecutor executor, SqlQueries queries) {
+        this.jdbc = jdbc;
+        this.executor = executor;
+        this.qListar = queries.get("SPS.CARGO.LISTAR");
+        this.qInserir = queries.get("SPI.CARGO.INSERIR");
+        this.qAlterar = queries.get("SPU.CARGO.ALTERAR");
+        this.qDeletar = queries.get("SPD.CARGO.DELETAR");
+    }
+
+    @Override
     public List<Cargo> listarCargos() {
-        try {
-            return buscarTodos(queryListar, BeanPropertyRowMapper.newInstance(Cargo.class));
-        } catch (Exception ex) {
-            throw tratarErro("Erro ao listar cargos", ex);
-        }
+        return executor.executar("Listar cargos", () -> jdbc.query(qListar, BeanPropertyRowMapper.newInstance(Cargo.class)));
     }
 
     @Override
-    public Cargo salvarCargo(Cargo cargo) {
-        try {
-            return salvar(queryInserir, cargo, "id_cargo");
-        } catch (Exception ex) {
-            throw tratarErro("Erro ao salvar cargo", ex);
-        }
+    public Cargo salvarCargo(Cargo entidade) {
+        return executor.executar("Salvar cargo", () -> {
+            entidade.setId(JdbcSuporte.inserir(jdbc, qInserir, new BeanPropertySqlParameterSource(entidade), "id_cargo"));
+            return entidade;
+        });
     }
 
     @Override
-    public Cargo alterarCargo(Cargo cargo) {
-        try {
-            return alterar(queryAlterar, cargo);
-        } catch (Exception ex) {
-            throw tratarErro("Erro ao alterar cargo", ex);
-        }
+    public Cargo alterarCargo(Cargo entidade) {
+        return executor.executar("Alterar cargo", () -> {
+            jdbc.update(qAlterar, new BeanPropertySqlParameterSource(entidade));
+            return entidade;
+        });
     }
 
     @Override
     public void deletarCargo(Long id) {
-        try {
-            deletar(queryDeletar, new MapSqlParameterSource("id", id));
-        } catch (Exception ex) {
-            throw tratarErro("Erro ao deletar cargo", ex);
-        }
-    }
-
-    private ValidacaoException tratarErro(String mensagem, Exception ex) {
-        log.error(mensagem, ex);
-        return new ValidacaoException(NordHttpEnum.HTTP_400, mensagem, ExceptionUtils.getMessage(ex));
+        executor.executar("Excluir cargo", () -> jdbc.update(qDeletar, new MapSqlParameterSource("id", id)));
     }
 }

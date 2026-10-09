@@ -1,12 +1,11 @@
 package br.com.nord_tool_backend.controller.write;
 
+import br.com.nord_tool_backend.exception.EntradaInvalidaException;
 import br.com.nord_tool_backend.controller.response.ApiResponseBody;
 import br.com.nord_tool_backend.controller.response.CaixinhaResponse;
-import br.com.nord_tool_backend.controller.response.NordHttpEnum;
 import br.com.nord_tool_backend.dto.CaixinhaComprovanteDto;
 import br.com.nord_tool_backend.dto.CaixinhaLancamentoDto;
 import br.com.nord_tool_backend.dto.CaixinhaResponsavelDto;
-import br.com.nord_tool_backend.excepetion.ValidacaoException;
 import br.com.nord_tool_backend.form.CaixinhaLancamentoForm;
 import br.com.nord_tool_backend.form.CaixinhaMarcacaoForm;
 import br.com.nord_tool_backend.form.CaixinhaResponsavelForm;
@@ -99,7 +98,7 @@ public class CaixinhaWriteController implements CaixinhaResponse {
         try {
             return arquivo.getBytes();
         } catch (IOException ex) {
-            throw new ValidacaoException(NordHttpEnum.HTTP_400, "Não foi possível ler o arquivo enviado", ex.getMessage());
+            throw new EntradaInvalidaException("Não foi possível ler o arquivo enviado", ex);
         }
     }
 }

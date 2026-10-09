@@ -1,170 +1,130 @@
 package br.com.nord_tool_backend.repository.impl;
 
-import br.com.nord_tool_backend.controller.response.NordHttpEnum;
 import br.com.nord_tool_backend.domain.ApartamentoVistoria;
 import br.com.nord_tool_backend.domain.InfoGeralApartamentoVistoria;
+import br.com.nord_tool_backend.domain.OrdenacaoApartamentoVistoria;
+import br.com.nord_tool_backend.domain.enums.ApartamentoVistoriaFiltroEnum;
 import br.com.nord_tool_backend.dto.ApartamentoVistoriaDto;
 import br.com.nord_tool_backend.dto.ApartamentoVistoriaFiltroDto;
-import br.com.nord_tool_backend.excepetion.ValidacaoException;
 import br.com.nord_tool_backend.repository.ApartamentoVistoriaRepository;
-import br.com.nord_tool_backend.repository.RepositoryJdbcOperationsSql;
-import br.com.nord_tool_backend.utils.StringUtils;
-import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.exception.ExceptionUtils;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.PropertySource;
+import br.com.nord_tool_backend.repository.jdbc.JdbcExecutor;
+import br.com.nord_tool_backend.repository.jdbc.JdbcSuporte;
+import br.com.nord_tool_backend.repository.jdbc.SqlQueries;
 import org.springframework.jdbc.core.BeanPropertyRowMapper;
+import org.springframework.jdbc.core.namedparam.BeanPropertySqlParameterSource;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.jdbc.core.namedparam.SqlParameterSourceUtils;
 import org.springframework.stereotype.Repository;
 
 import java.sql.Types;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 
 import static br.com.nord_tool_backend.utils.StringUtils.parseDataPermitida;
 
 @Repository
-@Slf4j
-@PropertySource("classpath:query/apartamento-vistoria.properties")
-public class ApartamentoVistoriaRepositoryImpl extends RepositoryJdbcOperationsSql<ApartamentoVistoria> implements ApartamentoVistoriaRepository {
+public class ApartamentoVistoriaRepositoryImpl implements ApartamentoVistoriaRepository {
 
-    private static final String ERRO_GENERICO_SALVAR = "Erro ao salvar apartamento";
-    private static final String ERRO_GENERICO_ALTERAR = "Erro ao alterar apartamento";
-    private static final String ERRO_GENERICO_DELETAR = "Erro ao deletar apartamento";
-    private static final String ERRO_GENERICO_BUSCAR = "Erro ao buscar apartamento";
-    private static final String ERRO_GENERICO_LISTAR = "Erro ao listar apartamentos";
+    private final NamedParameterJdbcTemplate jdbc;
+    private final JdbcExecutor executor;
+    private final String qInserir;
+    private final String qAlterar;
+    private final String qDeletar;
+    private final String qBuscar;
+    private final String qListar;
+    private final String qPaginacao;
+    private final String qInfoGeral;
+    private final Map<ApartamentoVistoriaFiltroEnum, String> qFiltros = new EnumMap<>(ApartamentoVistoriaFiltroEnum.class);
 
-    @Value("${SPI.APARTAMENTO_VISTORIA}")
-    private String querySalvaApartamentoVistoria;
-
-    @Value("${SPU.APARTAMENTO_VISTORIA}")
-    private String queryAlteraApartamentoVistoria;
-
-    @Value("${SPD.APARTAMENTO_VISTORIA.WHERE.ID}")
-    private String queryDeletaApartamentoVistoria;
-
-    @Value("${SPS.BUSCAR.APARTAMENTO_VISTORIA}")
-    private String queryBuscaApartamentoVistoria;
-
-    @Value("${SPS.LISTAR.APARTAMENTO_VISTORIA}")
-    private String queryListaApartamentoVistoria;
-
-    @Value("${SPS.APARTAMENTO_VISTORIA_PAGINACAO}")
-    private String queryPaginacao;
-
-    @Value("${SPS.LISTAR.INFO_GERAL_APARTAMENTO_VISTORIA}")
-    private String queryListaInfoGeralApartamentoVistoria;
+    public ApartamentoVistoriaRepositoryImpl(NamedParameterJdbcTemplate jdbc, JdbcExecutor executor, SqlQueries queries) {
+        this.jdbc = jdbc;
+        this.executor = executor;
+        this.qInserir = queries.get("SPI.APARTAMENTO_VISTORIA");
+        this.qAlterar = queries.get("SPU.APARTAMENTO_VISTORIA");
+        this.qDeletar = queries.get("SPD.APARTAMENTO_VISTORIA.WHERE.ID");
+        this.qBuscar = queries.get("SPS.BUSCAR.APARTAMENTO_VISTORIA");
+        this.qListar = queries.get("SPS.LISTAR.APARTAMENTO_VISTORIA");
+        this.qPaginacao = queries.get("SPS.APARTAMENTO_VISTORIA_PAGINACAO");
+        this.qInfoGeral = queries.get("SPS.LISTAR.INFO_GERAL_APARTAMENTO_VISTORIA");
+        for (ApartamentoVistoriaFiltroEnum filtro : ApartamentoVistoriaFiltroEnum.values()) {
+            qFiltros.put(filtro, queries.get(filtro.getQueryProperty()));
+        }
+    }
 
     @Override
     public ApartamentoVistoriaDto salvarApartamentoVistoria(ApartamentoVistoria apartamentoVistoria) {
-        try {
-            log.info("Salvando na base de dados um Apartamento Vistoria");
-            ApartamentoVistoria apartamentoVistoriaSalvar = salvar(querySalvaApartamentoVistoria, apartamentoVistoria, "id_apartamento_vistoria");
-            return ApartamentoVistoriaDto.converterToDto(apartamentoVistoriaSalvar);
-        } catch (Exception ex) {
-            log.error(ExceptionUtils.getMessage(ex));
-            throw new ValidacaoException(NordHttpEnum.HTTP_400, StringUtils.getMensagem(ERRO_GENERICO_SALVAR), ex.getMessage());
-        }
+        return executor.executar("Salvar apartamento", () -> {
+            apartamentoVistoria.setId(JdbcSuporte.inserir(jdbc, qInserir,
+                    new BeanPropertySqlParameterSource(apartamentoVistoria), "id_apartamento_vistoria"));
+            return ApartamentoVistoriaDto.converterToDto(apartamentoVistoria);
+        });
     }
 
     @Override
     public ApartamentoVistoriaDto alterarApartamentoVistoria(ApartamentoVistoria apartamentoVistoria) {
-        try {
-            log.info("Alterando na base de dados um Apartamento Vistoria");
-            ApartamentoVistoria apartamentoVistoriaAlterar = alterar(queryAlteraApartamentoVistoria, apartamentoVistoria);
-            return ApartamentoVistoriaDto.converterToDto(apartamentoVistoriaAlterar);
-        } catch (Exception ex) {
-            log.error(ExceptionUtils.getMessage(ex));
-            throw new ValidacaoException(NordHttpEnum.HTTP_400, StringUtils.getMensagem(ERRO_GENERICO_ALTERAR), ex.getMessage());
-        }
+        return executor.executar("Alterar apartamento", () -> {
+            jdbc.update(qAlterar, new BeanPropertySqlParameterSource(apartamentoVistoria));
+            return ApartamentoVistoriaDto.converterToDto(apartamentoVistoria);
+        });
     }
 
     @Override
     public void deletarApartamentoVistoria(Long id) {
-        MapSqlParameterSource params = new MapSqlParameterSource("id", id);
-        try {
-            log.info("Apagando na base de dados um Apartamento Vistoria");
-            deletar(queryDeletaApartamentoVistoria, params);
-        } catch (Exception ex) {
-            log.error(ExceptionUtils.getMessage(ex));
-            throw new ValidacaoException(NordHttpEnum.HTTP_400, StringUtils.getMensagem(ERRO_GENERICO_DELETAR), ex.getMessage());
-        }
+        executor.executar("Excluir apartamento", () -> jdbc.update(qDeletar, new MapSqlParameterSource("id", id)));
     }
 
     @Override
     public ApartamentoVistoria buscarApartamentoVistoria(Long id) {
-        MapSqlParameterSource params = new MapSqlParameterSource("id", id);
-        try {
-            log.info("Buscando na base de dados um Apartamento Vistoria");
-            return buscarPorId(queryBuscaApartamentoVistoria, params, BeanPropertyRowMapper.newInstance(ApartamentoVistoria.class));
-        } catch (Exception ex) {
-            log.error(ExceptionUtils.getMessage(ex));
-            throw new ValidacaoException(NordHttpEnum.HTTP_400, StringUtils.getMensagem(ERRO_GENERICO_BUSCAR), ex.getMessage());
-        }
+        return executor.executar("Buscar apartamento", () ->
+                jdbc.queryForObject(qBuscar, new MapSqlParameterSource("id", id),
+                        BeanPropertyRowMapper.newInstance(ApartamentoVistoria.class)));
     }
 
     @Override
     public List<ApartamentoVistoria> listarApartamentoVistoria() {
-        try {
-            log.info("Listando na base de dados Apartamentos Vistoria");
-            return buscarTodos(queryListaApartamentoVistoria, BeanPropertyRowMapper.newInstance(ApartamentoVistoria.class));
-        } catch (Exception ex) {
-            log.error(ExceptionUtils.getMessage(ex));
-            throw new ValidacaoException(NordHttpEnum.HTTP_400, StringUtils.getMensagem(ERRO_GENERICO_LISTAR), ex.getMessage());
-        }
+        return executor.executar("Listar apartamentos", () ->
+                jdbc.query(qListar, BeanPropertyRowMapper.newInstance(ApartamentoVistoria.class)));
     }
 
     @Override
-    public void salvarEmLote(List<ApartamentoVistoria> lsApartamentoVistoria) {
-        try {
-            log.info("Salvando dados da planilha de apartamentos em lote na base de dados");
-            salvarTodos(querySalvaApartamentoVistoria, lsApartamentoVistoria);
-        } catch (Exception ex) {
-            log.error(ExceptionUtils.getMessage(ex));
-            throw new ValidacaoException(NordHttpEnum.HTTP_400, StringUtils.getMensagem(ERRO_GENERICO_SALVAR), ex.getMessage());
-        }
+    public void salvarEmLote(List<ApartamentoVistoria> apartamentos) {
+        executor.executar("Salvar apartamentos da planilha", () ->
+                jdbc.batchUpdate(qInserir, SqlParameterSourceUtils.createBatch(apartamentos.toArray())));
     }
 
     @Override
-    public List<ApartamentoVistoriaDto> listarApartamentoVistoriaFiltrado(String query, ApartamentoVistoriaFiltroDto apartamentoVistoriaFiltroDto, String filtraTodos, int nrPagina, int nrQuantidadePorPagina) {
-        MapSqlParameterSource mapSqlParameterSource = new MapSqlParameterSource();
-
+    public List<ApartamentoVistoriaDto> listarApartamentoVistoriaFiltrado(ApartamentoVistoriaFiltroDto filtro, String filtraTodos,
+                                                                          int nrPagina, int nrQuantidadePorPagina,
+                                                                          OrdenacaoApartamentoVistoria ordenacao) {
+        MapSqlParameterSource params = new MapSqlParameterSource();
         if (filtraTodos != null && !filtraTodos.isEmpty()) {
-            mapSqlParameterSource.addValue("filtraTodos", "%".concat(filtraTodos).concat("%"));
+            params.addValue("filtraTodos", "%" + filtraTodos + "%");
         }
-        mapSqlParameterSource.addValue("nmApartamentoVistoria", apartamentoVistoriaFiltroDto.getNmApartamentoVistoria(), Types.VARCHAR);
-        mapSqlParameterSource.addValue("nmDiaSemana", apartamentoVistoriaFiltroDto.getNmDiaSemana(), Types.VARCHAR);
-        mapSqlParameterSource.addValue("dtApartamentoVigente", parseDataPermitida(apartamentoVistoriaFiltroDto.getDtApartamentoVigente()), Types.DATE);
-        mapSqlParameterSource.addValue("nmHorarioVistoria", apartamentoVistoriaFiltroDto.getNmHorarioVistoria(), Types.VARCHAR);
-        mapSqlParameterSource.addValue("nmStatusVistoria", apartamentoVistoriaFiltroDto.getNmStatusVistoria(), Types.VARCHAR);
-        mapSqlParameterSource.addValue("txObservacaoRevistoria", apartamentoVistoriaFiltroDto.getTxObservacaoRevistoria(), Types.VARCHAR);
-        mapSqlParameterSource.addValue("dtRevistoriaVigente", parseDataPermitida(apartamentoVistoriaFiltroDto.getDtRevistoriaVigente()), Types.DATE);
+        params.addValue("nmApartamentoVistoria", filtro.getNmApartamentoVistoria(), Types.VARCHAR);
+        params.addValue("nmDiaSemana", filtro.getNmDiaSemana(), Types.VARCHAR);
+        params.addValue("dtApartamentoVigente", parseDataPermitida(filtro.getDtApartamentoVigente()), Types.DATE);
+        params.addValue("nmHorarioVistoria", filtro.getNmHorarioVistoria(), Types.VARCHAR);
+        params.addValue("nmStatusVistoria", filtro.getNmStatusVistoria(), Types.VARCHAR);
+        params.addValue("txObservacaoRevistoria", filtro.getTxObservacaoRevistoria(), Types.VARCHAR);
+        params.addValue("dtRevistoriaVigente", parseDataPermitida(filtro.getDtRevistoriaVigente()), Types.DATE);
+        params.addValue("nrPagina", nrPagina);
+        params.addValue("nrQuantidadePorPagina", nrQuantidadePorPagina);
 
-        mapSqlParameterSource.addValue("nrPagina", nrPagina);
-        mapSqlParameterSource.addValue("nrQuantidadePorPagina", nrQuantidadePorPagina);
-
-        String sql = query + queryPaginacao;
-        try {
-            log.info("Listando da base de dados os Apartamentos Vistoria filtrados");
-            return buscarTodosPorFiltro(sql, mapSqlParameterSource, BeanPropertyRowMapper.newInstance(ApartamentoVistoriaDto.class));
-        } catch (Exception ex) {
-            log.error(ExceptionUtils.getMessage(ex));
-            throw new ValidacaoException(NordHttpEnum.HTTP_400, StringUtils.getMensagem(ERRO_GENERICO_LISTAR), ex.getMessage());
-        }
+        // Só fragmentos constantes: a query do catálogo, o ORDER BY montado a partir dos enums e a paginação parametrizada.
+        String sql = qFiltros.get(ApartamentoVistoriaFiltroEnum.para(filtraTodos)) + ordenacao.sql() + qPaginacao;
+        return executor.executar("Listar apartamentos filtrados", () ->
+                jdbc.query(sql, params, BeanPropertyRowMapper.newInstance(ApartamentoVistoriaDto.class)));
     }
 
     @Override
-    public List<InfoGeralApartamentoVistoria> listarInfoGeralApartamentoVistoria(String dtiApartamentoVistoriaFiltro, String dtfApartamentoVistoriaFiltro) {
-        try {
-            MapSqlParameterSource mapSqlParameterSource = new MapSqlParameterSource();
-
-            log.info("Listando na base de dados informações gerais dos Apartamentos");
-            mapSqlParameterSource.addValue("dtiApartamentoVistoriaFiltro", parseDataPermitida(dtiApartamentoVistoriaFiltro), Types.DATE);
-            mapSqlParameterSource.addValue("dtfApartamentoVistoriaFiltro", parseDataPermitida(dtfApartamentoVistoriaFiltro), Types.DATE);
-
-            return buscarTodosPorFiltro(queryListaInfoGeralApartamentoVistoria, mapSqlParameterSource, BeanPropertyRowMapper.newInstance(InfoGeralApartamentoVistoria.class));
-        } catch (Exception ex) {
-            log.error(ExceptionUtils.getMessage(ex));
-            throw new ValidacaoException(NordHttpEnum.HTTP_400, StringUtils.getMensagem(ERRO_GENERICO_LISTAR), ex.getMessage());
-        }
+    public List<InfoGeralApartamentoVistoria> listarInfoGeralApartamentoVistoria(String dtiApartamentoVistoriaFiltro,
+                                                                                 String dtfApartamentoVistoriaFiltro) {
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("dtiApartamentoVistoriaFiltro", parseDataPermitida(dtiApartamentoVistoriaFiltro), Types.DATE)
+                .addValue("dtfApartamentoVistoriaFiltro", parseDataPermitida(dtfApartamentoVistoriaFiltro), Types.DATE);
+        return executor.executar("Listar informações gerais dos apartamentos", () ->
+                jdbc.query(qInfoGeral, params, BeanPropertyRowMapper.newInstance(InfoGeralApartamentoVistoria.class)));
     }
 }

@@ -1,11 +1,13 @@
 package br.com.nord_tool_backend.service.impl;
 
-import br.com.nord_tool_backend.controller.response.NordHttpEnum;
+import br.com.nord_tool_backend.security.Acao;
+import br.com.nord_tool_backend.security.Modulo;
+import br.com.nord_tool_backend.service.AutorizacaoService;
+import br.com.nord_tool_backend.exception.EntradaInvalidaException;
 import br.com.nord_tool_backend.dto.CasamentoConfiguracaoDto;
 import br.com.nord_tool_backend.dto.CasamentoDashboardDto;
 import br.com.nord_tool_backend.dto.CasamentoMarcoDto;
 import br.com.nord_tool_backend.dto.CasamentoTotaisDto;
-import br.com.nord_tool_backend.excepetion.ValidacaoException;
 import br.com.nord_tool_backend.form.CasamentoConfiguracaoForm;
 import br.com.nord_tool_backend.repository.CasamentoRepository;
 import br.com.nord_tool_backend.service.CasamentoService;
@@ -28,11 +30,14 @@ public class CasamentoServiceImpl implements CasamentoService {
     static final String CHAVE_DATA = "dataCasamento";
     static final int QT_PROXIMOS_MARCOS = 5;
 
-    private final CasamentoRepository repository;
+    private final CasamentoRepository repository;
+
+    private final AutorizacaoService autorizacao;
 
     @Override
     @Transactional(readOnly = true)
     public CasamentoConfiguracaoDto buscarConfiguracao() {
+        autorizacao.exigir(Modulo.CASAMENTO, Acao.LEITURA);
         Map<String, String> config = repository.listarConfiguracao();
         return new CasamentoConfiguracaoDto(config.get(CHAVE_CASAL), config.get(CHAVE_DATA));
     }
@@ -40,10 +45,11 @@ public class CasamentoServiceImpl implements CasamentoService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public CasamentoConfiguracaoDto salvarConfiguracao(CasamentoConfiguracaoForm form) {
+        autorizacao.exigir(Modulo.CASAMENTO, Acao.ESCRITA);
         try {
             LocalDate.parse(form.getDataCasamento());
         } catch (DateTimeParseException ex) {
-            throw new ValidacaoException(NordHttpEnum.HTTP_400, "Data do casamento inválida", null);
+            throw new EntradaInvalidaException("Data do casamento inválida");
         }
         repository.salvarConfiguracao(CHAVE_CASAL, form.getCasal().trim());
         repository.salvarConfiguracao(CHAVE_DATA, form.getDataCasamento());
@@ -53,6 +59,7 @@ public class CasamentoServiceImpl implements CasamentoService {
     @Override
     @Transactional(readOnly = true)
     public CasamentoDashboardDto dashboard() {
+        autorizacao.exigir(Modulo.CASAMENTO, Acao.LEITURA);
         CasamentoTotaisDto t = repository.buscarTotais();
         List<CasamentoMarcoDto> proximos = repository.listarProximosMarcos(QT_PROXIMOS_MARCOS).stream()
                 .map(CasamentoMarcoDto::de).collect(Collectors.toList());

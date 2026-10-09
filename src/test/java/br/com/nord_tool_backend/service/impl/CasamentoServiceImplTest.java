@@ -1,10 +1,11 @@
 package br.com.nord_tool_backend.service.impl;
 
+import br.com.nord_tool_backend.service.AutorizacaoService;
+import br.com.nord_tool_backend.exception.NordException;
 import br.com.nord_tool_backend.domain.CasamentoMarco;
 import br.com.nord_tool_backend.dto.CasamentoConfiguracaoDto;
 import br.com.nord_tool_backend.dto.CasamentoDashboardDto;
 import br.com.nord_tool_backend.dto.CasamentoTotaisDto;
-import br.com.nord_tool_backend.excepetion.ValidacaoException;
 import br.com.nord_tool_backend.form.CasamentoConfiguracaoForm;
 import br.com.nord_tool_backend.repository.CasamentoRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,8 +19,17 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
+import br.com.nord_tool_backend.security.Modulo;
+import br.com.nord_tool_backend.security.Acao;
+import br.com.nord_tool_backend.exception.AcessoNegadoException;
+import br.com.nord_tool_backend.exception.NaoAutenticadoException;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 class CasamentoServiceImplTest {
+
+    private final AutorizacaoService autorizacao = org.mockito.Mockito.mock(AutorizacaoService.class);
 
     private CasamentoRepository repository;
     private CasamentoServiceImpl service;
@@ -27,7 +37,7 @@ class CasamentoServiceImplTest {
     @BeforeEach
     void setUp() {
         repository = mock(CasamentoRepository.class);
-        service = new CasamentoServiceImpl(repository);
+        service = new CasamentoServiceImpl(repository, autorizacao);
     }
 
     private CasamentoMarco marco(long id, String titulo, String prazo) {
@@ -88,7 +98,7 @@ class CasamentoServiceImplTest {
         form.setCasal("Ana & Beto");
         form.setDataCasamento("2027-02-31");
 
-        assertThrows(ValidacaoException.class, () -> service.salvarConfiguracao(form));
+        assertThrows(NordException.class, () -> service.salvarConfiguracao(form));
         verify(repository, never()).salvarConfiguracao(anyString(), anyString());
     }
 
@@ -135,5 +145,21 @@ class CasamentoServiceImplTest {
 
         assertEquals(0, d.getQtConvidados());
         assertEquals(BigDecimal.ZERO, d.getVlContratado());
+    }
+
+    // ---------- autorização ----------
+
+    @Test
+    void semPermissaoDeLeituraDoModuloNaoConsultaODado() {
+        when(autorizacao.exigir(Modulo.CASAMENTO, Acao.LEITURA)).thenThrow(new AcessoNegadoException("Acesso negado"));
+        assertThrows(AcessoNegadoException.class, () -> service.buscarConfiguracao());
+        verifyNoInteractions(repository);
+    }
+
+    @Test
+    void semPermissaoDeEscritaDoModuloNaoAlteraODado() {
+        when(autorizacao.exigir(Modulo.CASAMENTO, Acao.ESCRITA)).thenThrow(new AcessoNegadoException("Acesso negado"));
+        assertThrows(AcessoNegadoException.class, () -> service.salvarConfiguracao(null));
+        verifyNoInteractions(repository);
     }
 }

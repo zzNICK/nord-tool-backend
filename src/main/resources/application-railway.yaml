@@ -1,5 +1,7 @@
 server:
   port: ${PORT:8080}
+  # O Railway termina o TLS no proxy: usa X-Forwarded-* para o IP real (limite de login) e o esquema https.
+  forward-headers-strategy: framework
 
 spring:
   application:
@@ -18,6 +20,12 @@ spring:
       max-lifetime: 1200000
       auto-commit: false
       initialization-fail-timeout: 0
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
 
 nord-tool:
   cors:

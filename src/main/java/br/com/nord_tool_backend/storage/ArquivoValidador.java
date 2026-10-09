@@ -1,7 +1,7 @@
 package br.com.nord_tool_backend.storage;
 
-import br.com.nord_tool_backend.controller.response.NordHttpEnum;
-import br.com.nord_tool_backend.excepetion.ValidacaoException;
+import br.com.nord_tool_backend.exception.NordException;
+import br.com.nord_tool_backend.exception.EntradaInvalidaException;
 
 /** Validação de uploads por conteúdo (magic bytes), tamanho e nome. */
 public final class ArquivoValidador {
@@ -94,7 +94,7 @@ public final class ArquivoValidador {
         return true;
     }
 
-    private static ValidacaoException erro(String mensagem) {
-        return new ValidacaoException(NordHttpEnum.HTTP_400, mensagem, null);
+    private static NordException erro(String mensagem) {
+        return new EntradaInvalidaException(mensagem);
     }
 }

@@ -1,5 +1,6 @@
 package br.com.nord_tool_backend.service.impl;
 
+import br.com.nord_tool_backend.exception.NaoEncontradoException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -44,7 +45,7 @@ public class CacheServiceImplTest {
         String cacheName = "cacheInexistente";
 
         when(cacheManager.getCache(cacheName)).thenReturn(null);
-        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> cacheService.limparCache(cacheName));
+        NaoEncontradoException exception = assertThrows(NaoEncontradoException.class, () -> cacheService.limparCache(cacheName));
         assertEquals("Cache não encontrado: " + cacheName, exception.getMessage());
         verify(cacheManager).getCache(cacheName);
     }

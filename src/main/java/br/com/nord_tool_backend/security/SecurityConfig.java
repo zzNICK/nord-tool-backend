@@ -9,19 +9,22 @@ import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
-import org.springframework.security.config.annotation.method.configuration.EnableGlobalMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
 
 import javax.servlet.http.HttpServletResponse;
 import java.nio.charset.StandardCharsets;
 
+/**
+ * Autenticação obrigatória em todas as rotas, exceto login e health (e a documentação no perfil local).
+ * A autorização por módulo/ação é decidida nos serviços ({@code AutorizacaoService}).
+ */
 @Configuration
-@EnableGlobalMethodSecurity(prePostEnabled = true)
 public class SecurityConfig {
 
     private static final String API = "/api/v1/nord-tool";
@@ -35,6 +38,11 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http, SecurityProperties props,
                                                    JwtAuthenticationFilter jwtFilter, Environment env,
                                                    ObjectMapper mapper) throws Exception {
+        boolean local = env.acceptsProfiles(Profiles.of("local"));
+        if (props.isAllowEphemeralSecret() && !local) {
+            throw new IllegalStateException("nord-tool.security.allow-ephemeral-secret só é permitido no perfil local");
+        }
+
         http.csrf().disable()
                 .cors().and()
                 .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS).and()
@@ -45,24 +53,22 @@ public class SecurityConfig {
                 .accessDeniedHandler((req, res, ex) ->
                         escreverErro(mapper, res, NordHttpEnum.HTTP_403, "ACESSO_NEGADO", "Acesso negado"));
 
-        if (!props.isEnabled()) {
-            // Segurança desligada: comportamento anterior (tudo liberado).
-            http.authorizeRequests().anyRequest().permitAll();
-            return http.build();
+        http.headers()
+                .frameOptions().deny()
+                .referrerPolicy(ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER).and()
+                .httpStrictTransportSecurity().includeSubDomains(true).maxAgeInSeconds(31_536_000);
+        if (!local) {
+            // A API só devolve JSON e arquivos: nenhuma origem pode carregar script ou embutir as respostas.
+            http.headers().contentSecurityPolicy("default-src 'none'; frame-ancestors 'none'; sandbox");
         }
 
         http.authorizeRequests()
                 .antMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .antMatchers(HttpMethod.POST, API + "/auth/login").permitAll()
                 .antMatchers(HttpMethod.GET, API + "/health", "/nord-tool/health").permitAll();
-        if (env.acceptsProfiles(Profiles.of("local"))) {
+        if (local) {
             http.authorizeRequests().antMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll();
         }
-        // Financeiro: dados pessoais. LEITURA do módulo consulta, ESCRITA altera ("*" vale para todos os módulos).
-        // Regra por URL, na cadeia de filtros: recusa com 403 antes de ler o corpo ou validar qualquer coisa.
-        http.authorizeRequests()
-                .antMatchers(HttpMethod.GET, API + "/financeiro/**").access("@acessoModulo.leitura(authentication, 'FINANCEIRO')")
-                .antMatchers(API + "/financeiro/**").access("@acessoModulo.escrita(authentication, 'FINANCEIRO')");
         http.authorizeRequests().anyRequest().authenticated();
         return http.build();
     }

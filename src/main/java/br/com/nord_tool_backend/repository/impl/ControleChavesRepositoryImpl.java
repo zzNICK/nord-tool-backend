@@ -1,161 +1,123 @@
 package br.com.nord_tool_backend.repository.impl;
 
-import br.com.nord_tool_backend.controller.response.NordHttpEnum;
 import br.com.nord_tool_backend.domain.ApartamentoVistoria;
 import br.com.nord_tool_backend.domain.Ferramenta;
 import br.com.nord_tool_backend.domain.ObraControleChaves;
 import br.com.nord_tool_backend.domain.RequisicaoChave;
 import br.com.nord_tool_backend.domain.RequisicaoChaveConsulta;
-import br.com.nord_tool_backend.excepetion.ValidacaoException;
+import br.com.nord_tool_backend.exception.EntradaInvalidaException;
 import br.com.nord_tool_backend.repository.ControleChavesRepository;
-import br.com.nord_tool_backend.repository.RepositoryJdbcOperationsSql;
-import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.exception.ExceptionUtils;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.PropertySource;
+import br.com.nord_tool_backend.repository.jdbc.JdbcExecutor;
+import br.com.nord_tool_backend.repository.jdbc.JdbcSuporte;
+import br.com.nord_tool_backend.repository.jdbc.SqlQueries;
 import org.springframework.jdbc.core.BeanPropertyRowMapper;
+import org.springframework.jdbc.core.namedparam.BeanPropertySqlParameterSource;
+import org.springframework.jdbc.core.namedparam.EmptySqlParameterSource;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
 @Repository
-@Slf4j
-@PropertySource("classpath:query/controle-chaves.properties")
-public class ControleChavesRepositoryImpl extends RepositoryJdbcOperationsSql<RequisicaoChave> implements ControleChavesRepository {
+public class ControleChavesRepositoryImpl implements ControleChavesRepository {
 
-    @Value("${SPS.CONTROLE_CHAVES.LISTAR_OBRAS}")
-    private String queryListarObras;
+    private final NamedParameterJdbcTemplate jdbc;
+    private final JdbcExecutor executor;
+    private final String qListarObras;
+    private final String qListarApartamentos;
+    private final String qListarFerramentas;
+    private final String qContarEmCampo;
+    private final String qContarNoQuadro;
+    private final String qContarEntregues;
+    private final String qListarHistorico;
+    private final String qBuscarPorId;
+    private final String qInserir;
+    private final String qReceber;
 
-    @Value("${SPS.CONTROLE_CHAVES.LISTAR_APARTAMENTOS}")
-    private String queryListarApartamentos;
-
-    @Value("${SPS.CONTROLE_CHAVES.LISTAR_FERRAMENTAS}")
-    private String queryListarFerramentas;
-
-    @Value("${SPS.CONTROLE_CHAVES.COUNT_EM_CAMPO}")
-    private String queryCountEmCampo;
-
-    @Value("${SPS.CONTROLE_CHAVES.COUNT_NO_QUADRO}")
-    private String queryCountNoQuadro;
-
-    @Value("${SPS.CONTROLE_CHAVES.COUNT_ENTREGUES}")
-    private String queryCountEntregues;
-
-    @Value("${SPS.CONTROLE_CHAVES.LISTAR_HISTORICO}")
-    private String queryListarHistorico;
-
-    @Value("${SPS.CONTROLE_CHAVES.BUSCAR_POR_ID}")
-    private String queryBuscarPorId;
-
-    @Value("${SPI.CONTROLE_CHAVES.INSERIR}")
-    private String queryInserir;
-
-    @Value("${SPU.CONTROLE_CHAVES.RECEBER}")
-    private String queryReceber;
+    public ControleChavesRepositoryImpl(NamedParameterJdbcTemplate jdbc, JdbcExecutor executor, SqlQueries queries) {
+        this.jdbc = jdbc;
+        this.executor = executor;
+        this.qListarObras = queries.get("SPS.CONTROLE_CHAVES.LISTAR_OBRAS");
+        this.qListarApartamentos = queries.get("SPS.CONTROLE_CHAVES.LISTAR_APARTAMENTOS");
+        this.qListarFerramentas = queries.get("SPS.CONTROLE_CHAVES.LISTAR_FERRAMENTAS");
+        this.qContarEmCampo = queries.get("SPS.CONTROLE_CHAVES.COUNT_EM_CAMPO");
+        this.qContarNoQuadro = queries.get("SPS.CONTROLE_CHAVES.COUNT_NO_QUADRO");
+        this.qContarEntregues = queries.get("SPS.CONTROLE_CHAVES.COUNT_ENTREGUES");
+        this.qListarHistorico = queries.get("SPS.CONTROLE_CHAVES.LISTAR_HISTORICO");
+        this.qBuscarPorId = queries.get("SPS.CONTROLE_CHAVES.BUSCAR_POR_ID");
+        this.qInserir = queries.get("SPI.CONTROLE_CHAVES.INSERIR");
+        this.qReceber = queries.get("SPU.CONTROLE_CHAVES.RECEBER");
+    }
 
     @Override
     public List<ObraControleChaves> listarObras() {
-        try {
-            return buscarTodos(queryListarObras, BeanPropertyRowMapper.newInstance(ObraControleChaves.class));
-        } catch (Exception ex) {
-            throw tratarErro("Erro ao listar obras", ex);
-        }
+        return executor.executar("Listar obras", () ->
+                jdbc.query(qListarObras, BeanPropertyRowMapper.newInstance(ObraControleChaves.class)));
     }
 
     @Override
     public List<ApartamentoVistoria> listarApartamentos() {
-        try {
-            return buscarTodos(queryListarApartamentos, BeanPropertyRowMapper.newInstance(ApartamentoVistoria.class));
-        } catch (Exception ex) {
-            throw tratarErro("Erro ao listar apartamentos para controle de chaves", ex);
-        }
+        return executor.executar("Listar apartamentos do controle de chaves", () ->
+                jdbc.query(qListarApartamentos, BeanPropertyRowMapper.newInstance(ApartamentoVistoria.class)));
     }
 
     @Override
     public List<Ferramenta> listarFerramentas() {
-        try {
-            return buscarTodos(queryListarFerramentas, BeanPropertyRowMapper.newInstance(Ferramenta.class));
-        } catch (Exception ex) {
-            throw tratarErro("Erro ao listar ferramentas para controle de chaves", ex);
-        }
+        return executor.executar("Listar ferramentas do controle de chaves", () ->
+                jdbc.query(qListarFerramentas, BeanPropertyRowMapper.newInstance(Ferramenta.class)));
     }
 
     @Override
     public Long contarChavesEmCampo() {
-        try {
-            return namedParameterJdbcTemplate.queryForObject(queryCountEmCampo, new MapSqlParameterSource(), Long.class);
-        } catch (Exception ex) {
-            throw tratarErro("Erro ao contar chaves em campo", ex);
-        }
+        return contar("Contar chaves em campo", qContarEmCampo);
     }
 
     @Override
     public Long contarChavesNoQuadro() {
-        try {
-            return namedParameterJdbcTemplate.queryForObject(queryCountNoQuadro, new MapSqlParameterSource(), Long.class);
-        } catch (Exception ex) {
-            throw tratarErro("Erro ao contar chaves no quadro", ex);
-        }
+        return contar("Contar chaves no quadro", qContarNoQuadro);
     }
 
     @Override
     public Long contarChavesEntregues() {
-        try {
-            return namedParameterJdbcTemplate.queryForObject(queryCountEntregues, new MapSqlParameterSource(), Long.class);
-        } catch (Exception ex) {
-            throw tratarErro("Erro ao contar chaves entregues", ex);
-        }
+        return contar("Contar chaves entregues", qContarEntregues);
     }
 
     @Override
     public List<RequisicaoChaveConsulta> listarHistorico() {
-        try {
-            return buscarTodos(queryListarHistorico,
-                    BeanPropertyRowMapper.newInstance(RequisicaoChaveConsulta.class));
-        } catch (Exception ex) {
-            throw tratarErro("Erro ao listar histórico de controle de chaves", ex);
-        }
+        return executor.executar("Listar histórico do controle de chaves", () ->
+                jdbc.query(qListarHistorico, BeanPropertyRowMapper.newInstance(RequisicaoChaveConsulta.class)));
     }
 
     @Override
     public RequisicaoChaveConsulta buscarPorId(Long idRequisicao) {
-        try {
-            return buscarPorId(queryBuscarPorId, new MapSqlParameterSource("idRequisicao", idRequisicao), BeanPropertyRowMapper.newInstance(RequisicaoChaveConsulta.class));
-        } catch (Exception ex) {
-            throw tratarErro("Erro ao buscar requisição de chave por id", ex);
-        }
+        return executor.executar("Buscar requisição de chave", () ->
+                jdbc.queryForObject(qBuscarPorId, new MapSqlParameterSource("idRequisicao", idRequisicao),
+                        BeanPropertyRowMapper.newInstance(RequisicaoChaveConsulta.class)));
     }
 
     @Override
     public Long criarRetirada(RequisicaoChave requisicaoChave) {
-        try {
-            RequisicaoChave salva = salvar(queryInserir, requisicaoChave, "id_requisicao");
-            return salva.getId();
-        } catch (Exception ex) {
-            throw tratarErro("Erro ao criar retirada de chave", ex);
-        }
+        return executor.executar("Criar retirada de chave", () ->
+                JdbcSuporte.inserir(jdbc, qInserir, new BeanPropertySqlParameterSource(requisicaoChave), "id_requisicao"));
     }
 
     @Override
     public void receberRetirada(Long idRequisicao, Long idUserRecebimento, LocalDateTime dtRecebimento, String nmStatusRequisicao) {
-        try {
-            MapSqlParameterSource params = new MapSqlParameterSource()
-                    .addValue("idRequisicao", idRequisicao)
-                    .addValue("idUserRecebimento", idUserRecebimento)
-                    .addValue("dtRecebimento", dtRecebimento)
-                    .addValue("nmStatusRequisicao", nmStatusRequisicao);
-
-            int atualizadas = namedParameterJdbcTemplate.update(queryReceber, params);
-            if (atualizadas == 0) {throw new IllegalStateException("A retirada não existe ou não está aberta para recebimento");}
-        } catch (Exception ex) {
-            throw tratarErro("Erro ao receber retirada de chave", ex);
-        }
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("idRequisicao", idRequisicao)
+                .addValue("idUserRecebimento", idUserRecebimento)
+                .addValue("dtRecebimento", dtRecebimento)
+                .addValue("nmStatusRequisicao", nmStatusRequisicao);
+        executor.executar("Receber retirada de chave", () -> {
+            if (jdbc.update(qReceber, params) == 0) {
+                throw new EntradaInvalidaException("A retirada não existe ou não está aberta para recebimento");
+            }
+        });
     }
 
-    private ValidacaoException tratarErro(String mensagem, Exception ex) {
-        log.error(mensagem, ex);
-        return new ValidacaoException(NordHttpEnum.HTTP_400, mensagem, ExceptionUtils.getMessage(ex));
+    private Long contar(String operacao, String sql) {
+        return executor.executar(operacao, () -> jdbc.queryForObject(sql, EmptySqlParameterSource.INSTANCE, Long.class));
     }
 }

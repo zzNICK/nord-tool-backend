@@ -1,6 +1,8 @@
 package br.com.nord_tool_backend.service.impl;
 
-import br.com.nord_tool_backend.controller.response.NordHttpEnum;
+import br.com.nord_tool_backend.security.Acao;
+import br.com.nord_tool_backend.security.Modulo;
+import br.com.nord_tool_backend.service.AutorizacaoService;
 import br.com.nord_tool_backend.domain.TermoFoto;
 import br.com.nord_tool_backend.domain.TermoReprova;
 import br.com.nord_tool_backend.domain.enums.SituacaoTermoEnum;
@@ -8,7 +10,8 @@ import br.com.nord_tool_backend.dto.TermoFotoDto;
 import br.com.nord_tool_backend.dto.TermoReprovaDto;
 import br.com.nord_tool_backend.dto.TermoReprovaResumoDto;
 import br.com.nord_tool_backend.dto.TermoReprovaResumoGeralDto;
-import br.com.nord_tool_backend.excepetion.ValidacaoException;
+import br.com.nord_tool_backend.exception.EntradaInvalidaException;
+import br.com.nord_tool_backend.exception.NaoEncontradoException;
 import br.com.nord_tool_backend.form.OrdemFotoForm;
 import br.com.nord_tool_backend.form.SituacaoTermoForm;
 import br.com.nord_tool_backend.repository.TermoFotoRepository;
@@ -36,6 +39,8 @@ import java.util.stream.Collectors;
 public class TermoReprovaServiceImpl implements TermoReprovaService {
 
     static final int MAX_PAGINAS = 80;
+    /** Cota de fotos por termo: até 4 por página do limite de páginas. */
+    static final int MAX_FOTOS_POR_TERMO = 4 * MAX_PAGINAS;
     static final int MAX_LEGENDA = 240;
     static final String MSG_CONCLUIR_SEM_FOTO = "Anexe ao menos uma foto antes de concluir o termo.";
     private static final DateTimeFormatter FORMATO = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss");
@@ -46,11 +51,14 @@ public class TermoReprovaServiceImpl implements TermoReprovaService {
     // A listagem de apartamentos traz os dados do último termo: qualquer alteração invalida o cache.
     private final CacheService cacheService;
 
+    private final AutorizacaoService autorizacao;
+
     // ---------- termos ----------
 
     @Override
     @Transactional(readOnly = true)
     public TermoReprovaResumoGeralDto resumoGeral() {
+        autorizacao.exigir(Modulo.TERMO_REPROVA, Acao.LEITURA);
         TermoReprovaResumoGeralDto resumo = termoRepository.resumoGeral();
         int total = valor(resumo.getTotalApartamentosComReprova());
         double percentual = total == 0 ? 0.0
@@ -66,6 +74,7 @@ public class TermoReprovaServiceImpl implements TermoReprovaService {
     @Override
     @Transactional(readOnly = true)
     public List<TermoReprovaResumoDto> listarPorApartamento(Long idApartamento) {
+        autorizacao.exigir(Modulo.TERMO_REPROVA, Acao.LEITURA);
         return termoRepository.listarPorApartamento(idApartamento).stream()
                 .map(this::toResumo).collect(Collectors.toList());
     }
@@ -73,14 +82,16 @@ public class TermoReprovaServiceImpl implements TermoReprovaService {
     @Override
     @Transactional(readOnly = true)
     public TermoReprovaDto buscar(Long idTermo) {
+        autorizacao.exigir(Modulo.TERMO_REPROVA, Acao.LEITURA);
         return montar(termo(idTermo), new ArrayList<>());
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public TermoReprovaDto criar(Long idApartamento, String nomeArquivo, byte[] pdf, int nrPaginas) {
+        autorizacao.exigir(Modulo.TERMO_REPROVA, Acao.ESCRITA);
         if (!termoRepository.apartamentoExiste(idApartamento)) {
-            throw erro(NordHttpEnum.HTTP_404, "Apartamento não encontrado");
+            throw new NaoEncontradoException("Apartamento não encontrado");
         }
         validarNrPaginas(nrPaginas);
         String contentType = ArquivoValidador.validarPdf(nomeArquivo, pdf);
@@ -98,6 +109,7 @@ public class TermoReprovaServiceImpl implements TermoReprovaService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public TermoReprovaDto trocarArquivo(Long idTermo, String nomeArquivo, byte[] pdf, int nrPaginas) {
+        autorizacao.exigir(Modulo.TERMO_REPROVA, Acao.ESCRITA);
         TermoReprova atual = termo(idTermo);
         validarNrPaginas(nrPaginas);
         String contentType = ArquivoValidador.validarPdf(nomeArquivo, pdf);
@@ -130,11 +142,12 @@ public class TermoReprovaServiceImpl implements TermoReprovaService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public TermoReprovaDto atualizarSituacao(Long idTermo, SituacaoTermoForm form) {
+        autorizacao.exigir(Modulo.TERMO_REPROVA, Acao.ESCRITA);
         termo(idTermo);
         SituacaoTermoEnum situacao = SituacaoTermoEnum.de(form.getSituacao())
-                .orElseThrow(() -> erro(NordHttpEnum.HTTP_400, "Situação inválida. Use PENDENTE, EM_ANDAMENTO ou CONCLUIDO."));
+                .orElseThrow(() -> new EntradaInvalidaException("Situação inválida. Use PENDENTE, EM_ANDAMENTO ou CONCLUIDO."));
         if (situacao == SituacaoTermoEnum.CONCLUIDO && fotoRepository.contarPorTermo(idTermo) < 1) {
-            throw erro(NordHttpEnum.HTTP_400, MSG_CONCLUIR_SEM_FOTO);
+            throw new EntradaInvalidaException(MSG_CONCLUIR_SEM_FOTO);
         }
         String observacao = form.getObservacao() == null || form.getObservacao().trim().isEmpty()
                 ? null : form.getObservacao().trim();
@@ -146,6 +159,7 @@ public class TermoReprovaServiceImpl implements TermoReprovaService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void deletar(Long idTermo) {
+        autorizacao.exigir(Modulo.TERMO_REPROVA, Acao.ESCRITA);
         TermoReprova termo = termo(idTermo);
         List<TermoFoto> fotos = fotoRepository.listarPorTermo(idTermo);
         // Primeiro as linhas (o cascade remove as fotos), depois os arquivos que elas referenciam.
@@ -161,6 +175,7 @@ public class TermoReprovaServiceImpl implements TermoReprovaService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void apagarPorApartamento(Long idApartamento) {
+        autorizacao.exigir(Modulo.TERMO_REPROVA, Acao.ESCRITA);
         for (Long idTermo : termoRepository.listarIdsPorApartamento(idApartamento)) {
             deletar(idTermo);
         }
@@ -169,6 +184,7 @@ public class TermoReprovaServiceImpl implements TermoReprovaService {
     @Override
     @Transactional(readOnly = true)
     public ArquivoDownload abrirPdf(Long idTermo) {
+        autorizacao.exigir(Modulo.TERMO_REPROVA, Acao.LEITURA);
         TermoReprova termo = termo(idTermo);
         return new ArquivoDownload(armazenamento.abrir(termo.getIdArquivo()), versao(termo.getDhAlteracao()));
     }
@@ -178,8 +194,12 @@ public class TermoReprovaServiceImpl implements TermoReprovaService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public TermoFotoDto adicionarFoto(Long idTermo, String nomeImagem, byte[] imagem, byte[] miniatura, int nrPagina, String legenda) {
+        autorizacao.exigir(Modulo.TERMO_REPROVA, Acao.ESCRITA);
         TermoReprova termo = termo(idTermo);
         validarPagina(termo, nrPagina);
+        if (fotoRepository.contarPorTermo(idTermo) >= MAX_FOTOS_POR_TERMO) {
+            throw new EntradaInvalidaException("O termo já tem o máximo de " + MAX_FOTOS_POR_TERMO + " fotos");
+        }
         String tipoImagem = ArquivoValidador.validarImagem(nomeImagem, imagem);
         String tipoMiniatura = ArquivoValidador.validarImagem(nomeImagem, miniatura);
 
@@ -198,9 +218,10 @@ public class TermoReprovaServiceImpl implements TermoReprovaService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public TermoFotoDto editarFoto(Long idFoto, String nomeImagem, byte[] imagem, byte[] miniatura, String legenda, Integer nrPagina) {
+        autorizacao.exigir(Modulo.TERMO_REPROVA, Acao.ESCRITA);
         TermoFoto foto = foto(idFoto);
         if ((imagem == null) != (miniatura == null)) {
-            throw erro(NordHttpEnum.HTTP_400, "Envie a imagem e a miniatura juntas.");
+            throw new EntradaInvalidaException("Envie a imagem e a miniatura juntas.");
         }
         List<Long> arquivosParaApagar = new ArrayList<>();
 
@@ -229,6 +250,7 @@ public class TermoReprovaServiceImpl implements TermoReprovaService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void excluirFoto(Long idFoto) {
+        autorizacao.exigir(Modulo.TERMO_REPROVA, Acao.ESCRITA);
         TermoFoto foto = foto(idFoto);
         fotoRepository.deletar(idFoto);
         cacheService.limparTodos();
@@ -239,15 +261,16 @@ public class TermoReprovaServiceImpl implements TermoReprovaService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public List<TermoFotoDto> ordenarFotos(Long idTermo, List<OrdemFotoForm> ordem) {
+        autorizacao.exigir(Modulo.TERMO_REPROVA, Acao.ESCRITA);
         termo(idTermo);
         Set<Long> idsDoTermo = fotoRepository.listarPorTermo(idTermo).stream()
                 .map(TermoFoto::getId).collect(Collectors.toCollection(HashSet::new));
         for (OrdemFotoForm item : ordem) {
             if (item == null || item.getIdTermoFoto() == null || item.getNrOrdem() == null || item.getNrOrdem() < 0) {
-                throw erro(NordHttpEnum.HTTP_400, "Informe a foto e uma ordem válida para cada item.");
+                throw new EntradaInvalidaException("Informe a foto e uma ordem válida para cada item.");
             }
             if (!idsDoTermo.contains(item.getIdTermoFoto())) {
-                throw erro(NordHttpEnum.HTTP_400, "A foto " + item.getIdTermoFoto() + " não pertence a este termo.");
+                throw new EntradaInvalidaException("A foto " + item.getIdTermoFoto() + " não pertence a este termo.");
             }
         }
         for (OrdemFotoForm item : ordem) {
@@ -259,6 +282,7 @@ public class TermoReprovaServiceImpl implements TermoReprovaService {
     @Override
     @Transactional(readOnly = true)
     public ArquivoDownload abrirImagem(Long idFoto) {
+        autorizacao.exigir(Modulo.TERMO_REPROVA, Acao.LEITURA);
         TermoFoto foto = foto(idFoto);
         return new ArquivoDownload(armazenamento.abrir(foto.getIdArquivoImagem()), versao(foto.getDhAlteracao()));
     }
@@ -266,6 +290,7 @@ public class TermoReprovaServiceImpl implements TermoReprovaService {
     @Override
     @Transactional(readOnly = true)
     public ArquivoDownload abrirMiniatura(Long idFoto) {
+        autorizacao.exigir(Modulo.TERMO_REPROVA, Acao.LEITURA);
         TermoFoto foto = foto(idFoto);
         return new ArquivoDownload(armazenamento.abrir(foto.getIdArquivoMiniatura()), versao(foto.getDhAlteracao()));
     }
@@ -274,23 +299,23 @@ public class TermoReprovaServiceImpl implements TermoReprovaService {
 
     private TermoReprova termo(Long id) {
         return termoRepository.buscarPorId(id)
-                .orElseThrow(() -> erro(NordHttpEnum.HTTP_404, "Termo de reprova não encontrado"));
+                .orElseThrow(() -> new NaoEncontradoException("Termo de reprova não encontrado"));
     }
 
     private TermoFoto foto(Long id) {
         return fotoRepository.buscarPorId(id)
-                .orElseThrow(() -> erro(NordHttpEnum.HTTP_404, "Foto não encontrada"));
+                .orElseThrow(() -> new NaoEncontradoException("Foto não encontrada"));
     }
 
     private void validarNrPaginas(int nrPaginas) {
         if (nrPaginas < 1 || nrPaginas > MAX_PAGINAS) {
-            throw erro(NordHttpEnum.HTTP_400, "O número de páginas deve estar entre 1 e " + MAX_PAGINAS + ".");
+            throw new EntradaInvalidaException("O número de páginas deve estar entre 1 e " + MAX_PAGINAS + ".");
         }
     }
 
     private void validarPagina(TermoReprova termo, int nrPagina) {
         if (nrPagina < 1 || nrPagina > termo.getNrPaginas()) {
-            throw erro(NordHttpEnum.HTTP_400, "Página inválida: o termo tem " + termo.getNrPaginas() + " página(s).");
+            throw new EntradaInvalidaException("Página inválida: o termo tem " + termo.getNrPaginas() + " página(s).");
         }
     }
 
@@ -298,7 +323,7 @@ public class TermoReprovaServiceImpl implements TermoReprovaService {
         if (legenda == null || legenda.trim().isEmpty()) return null;
         String limpa = legenda.trim();
         if (limpa.length() > MAX_LEGENDA) {
-            throw erro(NordHttpEnum.HTTP_400, "A legenda deve ter no máximo " + MAX_LEGENDA + " caracteres.");
+            throw new EntradaInvalidaException("A legenda deve ter no máximo " + MAX_LEGENDA + " caracteres.");
         }
         return limpa;
     }
@@ -331,7 +356,4 @@ public class TermoReprovaServiceImpl implements TermoReprovaService {
                 f.getTxLegenda(), formatar(f.getDhAlteracao()), versao(f.getDhAlteracao()));
     }
 
-    private static ValidacaoException erro(NordHttpEnum tipo, String mensagem) {
-        return new ValidacaoException(tipo, mensagem, null);
-    }
 }

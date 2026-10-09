@@ -1,5 +1,7 @@
 package br.com.nord_tool_backend.security;
 
+import br.com.nord_tool_backend.service.SessaoService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -14,16 +16,25 @@ import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
+/**
+ * Autentica a requisição pelo Bearer token. Além da assinatura e da validade, confere a sessão no banco
+ * (usuário ativo e versão da sessão, com cache curto): token revogado segue como anônimo e recebe 401.
+ */
+@Slf4j
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private static final String PREFIXO = "Bearer ";
 
     private final JwtService jwtService;
+    private final SessaoService sessaoService;
 
-    public JwtAuthenticationFilter(JwtService jwtService) {
+    public JwtAuthenticationFilter(JwtService jwtService, SessaoService sessaoService) {
         this.jwtService = jwtService;
+        this.sessaoService = sessaoService;
     }
 
     @Override
@@ -31,27 +42,38 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         String cabecalho = request.getHeader("Authorization");
         if (cabecalho != null && cabecalho.startsWith(PREFIXO)) {
-            jwtService.validar(cabecalho.substring(PREFIXO.length()).trim()).ifPresent(usuario -> {
+            Optional<UsuarioAutenticado> usuario = jwtService.validar(cabecalho.substring(PREFIXO.length()).trim());
+            if (usuario.isPresent() && sessaoValida(usuario.get())) {
                 UsernamePasswordAuthenticationToken auth =
-                        new UsernamePasswordAuthenticationToken(usuario, null, autoridades(usuario));
+                        new UsernamePasswordAuthenticationToken(usuario.get(), null, autoridades(usuario.get()));
                 SecurityContextHolder.getContext().setAuthentication(auth);
-            });
+            }
         }
         chain.doFilter(request, response);
     }
 
-    /**
-     * ROLE_{perfil} e MODULO_{modulo} (ex.: MODULO_CASAMENTO). O módulo "*" vira MODULO_*;
-     * a hierarquia futura deve tratar "*" como curinga ao autorizar por módulo.
-     */
+    private boolean sessaoValida(UsuarioAutenticado usuario) {
+        try {
+            return sessaoService.valida(usuario);
+        } catch (RuntimeException ex) {
+            // Sem conseguir conferir a sessão, a requisição não é autenticada (falha fechada).
+            log.error("Não foi possível validar a sessão de {}", usuario, ex);
+            return false;
+        }
+    }
+
+    /** ROLE_{perfil} e PERM_{MODULO}_{ACAO} para cada nível atendido (ESCRITA gera também LEITURA). */
     static List<GrantedAuthority> autoridades(UsuarioAutenticado usuario) {
         List<GrantedAuthority> lista = new ArrayList<>();
         if (usuario.getPerfil() != null) {
             lista.add(new SimpleGrantedAuthority("ROLE_" + usuario.getPerfil()));
         }
-        for (String permissao : usuario.getPermissoes()) {
-            String modulo = permissao.contains(":") ? permissao.substring(0, permissao.indexOf(':')) : permissao;
-            lista.add(new SimpleGrantedAuthority("MODULO_" + modulo.toUpperCase()));
+        for (Map.Entry<Modulo, Acao> permissao : usuario.getPermissoes().entrySet()) {
+            for (Acao nivel : Acao.values()) {
+                if (nivel != Acao.NENHUM && permissao.getValue().atende(nivel)) {
+                    lista.add(new SimpleGrantedAuthority("PERM_" + permissao.getKey().name() + "_" + nivel.name()));
+                }
+            }
         }
         return lista;
     }

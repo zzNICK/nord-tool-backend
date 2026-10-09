@@ -1,5 +1,7 @@
 package br.com.nord_tool_backend.service.impl;
 
+import br.com.nord_tool_backend.service.AutorizacaoService;
+import br.com.nord_tool_backend.exception.NordException;
 import br.com.nord_tool_backend.controller.response.NordHttpEnum;
 import br.com.nord_tool_backend.domain.FinanceiroCategoria;
 import br.com.nord_tool_backend.domain.FinanceiroFiltro;
@@ -8,7 +10,6 @@ import br.com.nord_tool_backend.domain.FinanceiroPessoa;
 import br.com.nord_tool_backend.dto.FinanceiroLancamentoDto;
 import br.com.nord_tool_backend.dto.FinanceiroListaDto;
 import br.com.nord_tool_backend.dto.FinanceiroResumoDto;
-import br.com.nord_tool_backend.excepetion.ValidacaoException;
 import br.com.nord_tool_backend.form.FinanceiroCategoriaForm;
 import br.com.nord_tool_backend.form.FinanceiroLancamentoForm;
 import br.com.nord_tool_backend.form.FinanceiroPessoaForm;
@@ -46,8 +47,15 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import br.com.nord_tool_backend.security.Modulo;
+import br.com.nord_tool_backend.security.Acao;
+import br.com.nord_tool_backend.exception.AcessoNegadoException;
+import br.com.nord_tool_backend.exception.NaoAutenticadoException;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 class FinanceiroServiceImplTest {
+
+    private final AutorizacaoService autorizacao = org.mockito.Mockito.mock(AutorizacaoService.class);
 
     private static final String UUID1 = "11111111-1111-1111-1111-111111111111";
 
@@ -61,7 +69,7 @@ class FinanceiroServiceImplTest {
         projecaoRepository = mock(FinanceiroProjecaoRepository.class);
         // 08/10/2026 12:00 em São Paulo
         Clock relogio = Clock.fixed(Instant.parse("2026-10-08T15:00:00Z"), ZoneId.of("UTC"));
-        service = new FinanceiroServiceImpl(repository, projecaoRepository, relogio);
+        service = new FinanceiroServiceImpl(repository, projecaoRepository, relogio, autorizacao);
     }
 
     private void fechado(LocalDate competencia) {
@@ -126,8 +134,8 @@ class FinanceiroServiceImplTest {
     }
 
     private void esperaErro(NordHttpEnum esperado, Runnable acao) {
-        ValidacaoException ex = assertThrows(ValidacaoException.class, acao::run);
-        assertEquals(esperado, ex.getHttpEnum());
+        NordException ex = assertThrows(NordException.class, acao::run);
+        assertEquals(esperado, ex.getStatus());
     }
 
     // ---------- criação ----------
@@ -645,5 +653,21 @@ class FinanceiroServiceImplTest {
         assertEquals("Juan (obra)", captor.getValue().getNmCategoria());
         assertEquals(false, captor.getValue().getInAtivo());
         assertTrue(captor.getValue().getCdTipo().equals("SAIDA"));
+    }
+
+    // ---------- autorização ----------
+
+    @Test
+    void semPermissaoDeLeituraDoModuloNaoConsultaODado() {
+        when(autorizacao.exigir(Modulo.FINANCEIRO, Acao.LEITURA)).thenThrow(new AcessoNegadoException("Acesso negado"));
+        assertThrows(AcessoNegadoException.class, () -> service.listarPessoas());
+        verifyNoInteractions(repository, projecaoRepository);
+    }
+
+    @Test
+    void semPermissaoDeEscritaDoModuloNaoAlteraODado() {
+        when(autorizacao.exigir(Modulo.FINANCEIRO, Acao.ESCRITA)).thenThrow(new AcessoNegadoException("Acesso negado"));
+        assertThrows(AcessoNegadoException.class, () -> service.excluir(1L, 1));
+        verifyNoInteractions(repository, projecaoRepository);
     }
 }

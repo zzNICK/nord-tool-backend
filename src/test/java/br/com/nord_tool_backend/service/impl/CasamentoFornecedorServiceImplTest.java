@@ -1,10 +1,11 @@
 package br.com.nord_tool_backend.service.impl;
 
+import br.com.nord_tool_backend.service.AutorizacaoService;
+import br.com.nord_tool_backend.exception.NordException;
 import br.com.nord_tool_backend.domain.CasamentoAnexo;
 import br.com.nord_tool_backend.domain.CasamentoFornecedor;
 import br.com.nord_tool_backend.dto.CasamentoAnexoDto;
 import br.com.nord_tool_backend.dto.CasamentoFornecedorDto;
-import br.com.nord_tool_backend.excepetion.ValidacaoException;
 import br.com.nord_tool_backend.form.CasamentoFornecedorForm;
 import br.com.nord_tool_backend.repository.CasamentoRepository;
 import br.com.nord_tool_backend.storage.ArmazenamentoService;
@@ -26,8 +27,22 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
+import br.com.nord_tool_backend.security.Modulo;
+import br.com.nord_tool_backend.security.Acao;
+import br.com.nord_tool_backend.exception.AcessoNegadoException;
+import br.com.nord_tool_backend.exception.NaoAutenticadoException;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verifyNoInteractions;
+import java.util.Collections;
+import br.com.nord_tool_backend.exception.EntradaInvalidaException;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 class CasamentoFornecedorServiceImplTest {
+
+    private final AutorizacaoService autorizacao = org.mockito.Mockito.mock(AutorizacaoService.class);
 
     private static final byte[] PDF = {'%', 'P', 'D', 'F', '-', '1'};
     private static final byte[] PNG = {(byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A, 1};
@@ -40,7 +55,7 @@ class CasamentoFornecedorServiceImplTest {
     void setUp() {
         repository = mock(CasamentoRepository.class);
         armazenamento = mock(ArmazenamentoService.class);
-        service = new CasamentoFornecedorServiceImpl(repository, armazenamento);
+        service = new CasamentoFornecedorServiceImpl(repository, armazenamento, autorizacao);
     }
 
     private CasamentoFornecedor fornecedor(long id) {
@@ -109,9 +124,9 @@ class CasamentoFornecedorServiceImplTest {
 
     @Test
     void recusaStatusInvalido() {
-        ValidacaoException ex = assertThrows(ValidacaoException.class, () -> service.criar(form("A", "B", "TALVEZ", "1")));
+        NordException ex = assertThrows(NordException.class, () -> service.criar(form("A", "B", "TALVEZ", "1")));
 
-        assertEquals(400, ex.getHttpEnum().getStatus().value());
+        assertEquals(400, ex.getStatus().getStatus().value());
         verify(repository, never()).inserirFornecedor(any());
     }
 
@@ -119,9 +134,9 @@ class CasamentoFornecedorServiceImplTest {
     void alterarFornecedorInexistenteRetorna404() {
         when(repository.buscarFornecedor(9L)).thenReturn(Optional.empty());
 
-        ValidacaoException ex = assertThrows(ValidacaoException.class, () -> service.alterar(9L, form("A", "B", "CONTRATADO", "1")));
+        NordException ex = assertThrows(NordException.class, () -> service.alterar(9L, form("A", "B", "CONTRATADO", "1")));
 
-        assertEquals(404, ex.getHttpEnum().getStatus().value());
+        assertEquals(404, ex.getStatus().getStatus().value());
     }
 
     @Test
@@ -176,12 +191,12 @@ class CasamentoFornecedorServiceImplTest {
     @Test
     void recusaArquivoDeOutroTipoDescricaoLongaEFornecedorInexistente() {
         when(repository.buscarFornecedor(3L)).thenReturn(Optional.of(fornecedor(3L)));
-        assertThrows(ValidacaoException.class, () -> service.anexar(3L, "x.txt", "texto".getBytes(), null));
-        assertThrows(ValidacaoException.class, () -> service.anexar(3L, "c.pdf", PDF, new String(new char[201]).replace('\0', 'x')));
+        assertThrows(NordException.class, () -> service.anexar(3L, "x.txt", "texto".getBytes(), null));
+        assertThrows(NordException.class, () -> service.anexar(3L, "c.pdf", PDF, new String(new char[201]).replace('\0', 'x')));
         verify(armazenamento, never()).salvar(anyString(), anyString(), any());
 
         when(repository.buscarFornecedor(4L)).thenReturn(Optional.empty());
-        assertEquals(404, assertThrows(ValidacaoException.class, () -> service.anexar(4L, "c.pdf", PDF, null)).getHttpEnum().getStatus().value());
+        assertEquals(404, assertThrows(NordException.class, () -> service.anexar(4L, "c.pdf", PDF, null)).getStatus().getStatus().value());
     }
 
     @Test
@@ -204,5 +219,32 @@ class CasamentoFornecedorServiceImplTest {
 
         assertEquals("contrato.pdf", download.getConteudo().getNome());
         assertTrue(download.getVersao() > 0);
+    }
+
+    // ---------- cotas e limites ----------
+
+    @Test
+    void anexoAcimaDaCotaDoFornecedorEhRecusadoSemGravarArquivo() {
+        when(repository.buscarFornecedor(3L)).thenReturn(Optional.of(fornecedor(3L)));
+        when(repository.listarAnexos(3L)).thenReturn(Collections.nCopies(
+                CasamentoFornecedorServiceImpl.MAX_ANEXOS_POR_FORNECEDOR, new CasamentoAnexo()));
+        assertThrows(EntradaInvalidaException.class, () -> service.anexar(3L, "c.pdf", new byte[]{1}, null));
+        verify(armazenamento, never()).salvar(anyString(), anyString(), any());
+    }
+
+    // ---------- autorização ----------
+
+    @Test
+    void semPermissaoDeLeituraDoModuloNaoConsultaODado() {
+        when(autorizacao.exigir(Modulo.CASAMENTO, Acao.LEITURA)).thenThrow(new AcessoNegadoException("Acesso negado"));
+        assertThrows(AcessoNegadoException.class, () -> service.listar());
+        verifyNoInteractions(repository);
+    }
+
+    @Test
+    void semPermissaoDeEscritaDoModuloNaoAlteraODado() {
+        when(autorizacao.exigir(Modulo.CASAMENTO, Acao.ESCRITA)).thenThrow(new AcessoNegadoException("Acesso negado"));
+        assertThrows(AcessoNegadoException.class, () -> service.deletar(1L));
+        verifyNoInteractions(repository);
     }
 }

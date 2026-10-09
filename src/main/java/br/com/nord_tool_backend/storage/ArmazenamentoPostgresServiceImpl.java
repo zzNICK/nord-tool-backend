@@ -1,8 +1,8 @@
 package br.com.nord_tool_backend.storage;
 
-import br.com.nord_tool_backend.controller.response.NordHttpEnum;
+import br.com.nord_tool_backend.exception.NaoEncontradoException;
+import br.com.nord_tool_backend.exception.EntradaInvalidaException;
 import br.com.nord_tool_backend.domain.ArquivoArmazenado;
-import br.com.nord_tool_backend.excepetion.ValidacaoException;
 import br.com.nord_tool_backend.repository.ArquivoArmazenadoRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -26,7 +26,7 @@ public class ArmazenamentoPostgresServiceImpl implements ArmazenamentoService {
     @Transactional(rollbackFor = Exception.class)
     public Long salvar(String nome, String contentType, byte[] bytes) {
         if (bytes == null || bytes.length == 0) {
-            throw new ValidacaoException(NordHttpEnum.HTTP_400, "Arquivo vazio", null);
+            throw new EntradaInvalidaException("Arquivo vazio");
         }
         ArquivoArmazenado arquivo = new ArquivoArmazenado();
         arquivo.setNmProvedor(PROVEDOR);
@@ -42,7 +42,7 @@ public class ArmazenamentoPostgresServiceImpl implements ArmazenamentoService {
     @Transactional(readOnly = true)
     public ArquivoConteudo abrir(Long idArquivo) {
         ArquivoArmazenado arquivo = repository.buscarComConteudo(idArquivo)
-                .orElseThrow(() -> new ValidacaoException(NordHttpEnum.HTTP_404, "Arquivo não encontrado", null));
+                .orElseThrow(() -> new NaoEncontradoException("Arquivo não encontrado"));
         return new ArquivoConteudo(arquivo.getNmArquivo(), arquivo.getNmContentType(),
                 arquivo.getNrTamanhoBytes() == null ? 0 : arquivo.getNrTamanhoBytes(), arquivo.getBinConteudo());
     }

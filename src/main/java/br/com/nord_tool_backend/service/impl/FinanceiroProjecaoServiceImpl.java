@@ -1,6 +1,12 @@
 package br.com.nord_tool_backend.service.impl;
 
-import br.com.nord_tool_backend.controller.response.NordHttpEnum;
+import br.com.nord_tool_backend.security.Acao;
+import br.com.nord_tool_backend.security.Modulo;
+import br.com.nord_tool_backend.service.AutorizacaoService;
+import br.com.nord_tool_backend.exception.NordException;
+import br.com.nord_tool_backend.exception.EntradaInvalidaException;
+import br.com.nord_tool_backend.exception.ConflitoException;
+import br.com.nord_tool_backend.exception.NaoEncontradoException;
 import br.com.nord_tool_backend.domain.FinanceiroCategoria;
 import br.com.nord_tool_backend.domain.FinanceiroConfiguracao;
 import br.com.nord_tool_backend.domain.FinanceiroFaturaAberta;
@@ -17,7 +23,6 @@ import br.com.nord_tool_backend.dto.FinanceiroGeracaoDto;
 import br.com.nord_tool_backend.dto.FinanceiroProjecaoLinhaDto;
 import br.com.nord_tool_backend.dto.FinanceiroProjecaoMesDto;
 import br.com.nord_tool_backend.dto.FinanceiroRecorrenciaDto;
-import br.com.nord_tool_backend.excepetion.ValidacaoException;
 import br.com.nord_tool_backend.form.FinanceiroConfiguracaoForm;
 import br.com.nord_tool_backend.form.FinanceiroRecorrenciaForm;
 import br.com.nord_tool_backend.form.FinanceiroSaldoInicialForm;
@@ -54,11 +59,13 @@ public class FinanceiroProjecaoServiceImpl implements FinanceiroProjecaoService 
     private final FinanceiroRepository repository;
     private final FinanceiroProjecaoRepository projecaoRepository;
     private final Clock clock;
+    private final AutorizacaoService autorizacao;
 
-    public FinanceiroProjecaoServiceImpl(FinanceiroRepository repository, FinanceiroProjecaoRepository projecaoRepository, Clock clock) {
+    public FinanceiroProjecaoServiceImpl(FinanceiroRepository repository, FinanceiroProjecaoRepository projecaoRepository, Clock clock, AutorizacaoService autorizacao) {
         this.repository = repository;
         this.projecaoRepository = projecaoRepository;
         this.clock = clock;
+        this.autorizacao = autorizacao;
     }
 
     // ---------- a conta do mês ----------
@@ -66,12 +73,14 @@ public class FinanceiroProjecaoServiceImpl implements FinanceiroProjecaoService 
     @Override
     @Transactional(readOnly = true)
     public FinanceiroProjecaoMesDto obterMes(String competencia, Long idPessoa) {
+        autorizacao.exigir(Modulo.FINANCEIRO, Acao.LEITURA);
         return projetar(mes(competencia), idPessoa, false);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public FinanceiroProjecaoMesDto definirSaldoInicial(String competencia, FinanceiroSaldoInicialForm form) {
+        autorizacao.exigir(Modulo.FINANCEIRO, Acao.ESCRITA);
         YearMonth mes = mes(competencia);
         exigirAberto(mes);
         projecaoRepository.garantirMes(mes.atDay(1));
@@ -82,6 +91,7 @@ public class FinanceiroProjecaoServiceImpl implements FinanceiroProjecaoService 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public FinanceiroFechamentoDto fechar(String competencia, Long idUsuario) {
+        autorizacao.exigir(Modulo.FINANCEIRO, Acao.ESCRITA);
         YearMonth mes = mes(competencia);
         Optional<FinanceiroMes> linha = projecaoRepository.buscarMes(mes.atDay(1));
         if (linha.isPresent() && fechado(linha.get())) throw invalido("O mês de " + rotulo(mes) + " já está fechado");
@@ -107,6 +117,7 @@ public class FinanceiroProjecaoServiceImpl implements FinanceiroProjecaoService 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public FinanceiroProjecaoMesDto reabrir(String competencia) {
+        autorizacao.exigir(Modulo.FINANCEIRO, Acao.ESCRITA);
         YearMonth mes = mes(competencia);
         if (!mesFechadoNoBanco(mes)) throw invalido("O mês de " + rotulo(mes) + " não está fechado");
         if (projecaoRepository.existeMesFechadoApos(mes.atDay(1))) {
@@ -224,12 +235,14 @@ public class FinanceiroProjecaoServiceImpl implements FinanceiroProjecaoService 
     @Override
     @Transactional
     public FinanceiroConfiguracaoDto obterConfiguracao() {
+        autorizacao.exigir(Modulo.FINANCEIRO, Acao.LEITURA);
         return FinanceiroConfiguracaoDto.de(configuracao());
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public FinanceiroConfiguracaoDto atualizarConfiguracao(FinanceiroConfiguracaoForm form) {
+        autorizacao.exigir(Modulo.FINANCEIRO, Acao.ESCRITA);
         projecaoRepository.garantirConfiguracao();
         FinanceiroConfiguracao c = new FinanceiroConfiguracao();
         c.setVlMetaSaldo(form.getVlMetaSaldo());
@@ -259,8 +272,9 @@ public class FinanceiroProjecaoServiceImpl implements FinanceiroProjecaoService 
     @Override
     @Transactional(readOnly = true)
     public List<FinanceiroFaturaLeituraDto> listarLeituras(Long idLancamento) {
+        autorizacao.exigir(Modulo.FINANCEIRO, Acao.LEITURA);
         repository.buscarLancamento(idLancamento)
-                .orElseThrow(() -> new ValidacaoException(NordHttpEnum.HTTP_404, "Lançamento não encontrado", null));
+                .orElseThrow(() -> new NaoEncontradoException("Lançamento não encontrado"));
         return projecaoRepository.listarLeituras(idLancamento).stream().map(FinanceiroFaturaLeituraDto::de).collect(Collectors.toList());
     }
 
@@ -269,12 +283,14 @@ public class FinanceiroProjecaoServiceImpl implements FinanceiroProjecaoService 
     @Override
     @Transactional(readOnly = true)
     public List<FinanceiroRecorrenciaDto> listarRecorrencias() {
+        autorizacao.exigir(Modulo.FINANCEIRO, Acao.LEITURA);
         return projecaoRepository.listarRecorrencias().stream().map(FinanceiroRecorrenciaDto::de).collect(Collectors.toList());
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public FinanceiroRecorrenciaDto criarRecorrencia(FinanceiroRecorrenciaForm form) {
+        autorizacao.exigir(Modulo.FINANCEIRO, Acao.ESCRITA);
         validarRecorrencia(form, null, null);
         Long id = projecaoRepository.inserirRecorrencia(converter(form));
         return FinanceiroRecorrenciaDto.de(recorrencia(id));
@@ -283,13 +299,14 @@ public class FinanceiroProjecaoServiceImpl implements FinanceiroProjecaoService 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public FinanceiroRecorrenciaDto atualizarRecorrencia(Long id, FinanceiroRecorrenciaForm form) {
+        autorizacao.exigir(Modulo.FINANCEIRO, Acao.ESCRITA);
         if (form.getNrVersao() == null) throw invalido("Informe a versão da recorrência (nrVersao)");
         FinanceiroRecorrencia atual = recorrencia(id);
         validarRecorrencia(form, atual.getIdCategoria(), atual.getIdPessoa());
         FinanceiroRecorrencia nova = converter(form);
         nova.setId(id);
         if (projecaoRepository.alterarRecorrencia(nova, form.getNrVersao()) == 0) {
-            throw new ValidacaoException(NordHttpEnum.HTTP_409, MSG_CONFLITO, null);
+            throw new ConflitoException(MSG_CONFLITO);
         }
         return FinanceiroRecorrenciaDto.de(recorrencia(id));
     }
@@ -297,6 +314,7 @@ public class FinanceiroProjecaoServiceImpl implements FinanceiroProjecaoService 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public FinanceiroGeracaoDto gerarRecorrencias(String competencia, Long idUsuario) {
+        autorizacao.exigir(Modulo.FINANCEIRO, Acao.ESCRITA);
         YearMonth mes = mes(competencia);
         exigirAberto(mes);
         return new FinanceiroGeracaoDto(formato(mes), gerar(mes, idUsuario));
@@ -367,7 +385,7 @@ public class FinanceiroProjecaoServiceImpl implements FinanceiroProjecaoService 
 
     private FinanceiroRecorrencia recorrencia(Long id) {
         return projecaoRepository.buscarRecorrencia(id)
-                .orElseThrow(() -> new ValidacaoException(NordHttpEnum.HTTP_404, "Recorrência não encontrada", null));
+                .orElseThrow(() -> new NaoEncontradoException("Recorrência não encontrada"));
     }
 
     // ---------- auxiliares ----------
@@ -380,7 +398,7 @@ public class FinanceiroProjecaoServiceImpl implements FinanceiroProjecaoService 
         if (mesFechadoNoBanco(mes)) throw mesFechado(mes);
     }
 
-    private static ValidacaoException mesFechado(YearMonth mes) {
+    private static NordException mesFechado(YearMonth mes) {
         return invalido("O mês de " + rotulo(mes) + " está fechado. Reabra o mês para alterá-lo.");
     }
 
@@ -407,8 +425,8 @@ public class FinanceiroProjecaoServiceImpl implements FinanceiroProjecaoService 
         return NOMES[mes.getMonthValue() - 1] + " de " + mes.getYear();
     }
 
-    private static ValidacaoException invalido(String mensagem) {
-        return new ValidacaoException(NordHttpEnum.HTTP_400, mensagem, null);
+    private static NordException invalido(String mensagem) {
+        return new EntradaInvalidaException(mensagem);
     }
 
     private static int valor(Integer valor, int padrao) {

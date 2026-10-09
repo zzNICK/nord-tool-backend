@@ -40,7 +40,8 @@ public class BrapiCotacaoProvider implements CotacaoProvider {
                 .setReadTimeout(Duration.ofSeconds(timeoutSegundos)).build(), url, token);
     }
 
-    BrapiCotacaoProvider(RestTemplate http, String url, String token) {
+    /** Construtor com o cliente HTTP já montado (testes do CotacaoServiceImpl usam um servidor simulado). */
+    public BrapiCotacaoProvider(RestTemplate http, String url, String token) {
         this.http = http;
         this.url = url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
         this.token = token == null ? "" : token.trim();

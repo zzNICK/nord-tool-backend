@@ -4,31 +4,42 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
- * Configuração de segurança. Chave de liga/desliga: {@code nord-tool.security.enabled}
- * (env NORD_SECURITY_ENABLED). Com {@code false} a API fica aberta como antes, o que permite
- * publicar o backend antes do frontend com tela de login.
+ * Configuração de segurança ({@code nord-tool.security.*}). A autenticação é sempre exigida; fora do
+ * perfil {@code local} o startup falha sem chave JWT externa (ver {@link JwtServiceImpl} e {@link SecurityConfig}).
+ *
+ * <p>Chaves: {@code NORD_JWT_KEYS} no formato {@code kid1:base64;kid2:base64} e {@code NORD_JWT_ACTIVE_KID}
+ * com a chave que assina. As demais continuam valendo para validar (rotação). {@code NORD_JWT_SECRET} é aceito
+ * como chave única de compatibilidade.</p>
  */
 @Component
 public class SecurityProperties {
 
-    private final boolean enabled;
+    private final String jwtKeys;
+    private final String activeKid;
     private final String jwtSecret;
-    private final long inactivityMinutes;
+    private final long accessTokenMinutes;
+    private final long sessionMaxHours;
     private final boolean allowEphemeralSecret;
 
     public SecurityProperties(
-            @Value("${nord-tool.security.enabled:false}") boolean enabled,
+            @Value("${nord-tool.security.jwt-keys:}") String jwtKeys,
+            @Value("${nord-tool.security.active-kid:}") String activeKid,
             @Value("${nord-tool.security.jwt-secret:}") String jwtSecret,
-            @Value("${nord-tool.security.inactivity-minutes:30}") long inactivityMinutes,
+            @Value("${nord-tool.security.access-token-minutes:15}") long accessTokenMinutes,
+            @Value("${nord-tool.security.session-max-hours:12}") long sessionMaxHours,
             @Value("${nord-tool.security.allow-ephemeral-secret:false}") boolean allowEphemeralSecret) {
-        this.enabled = enabled;
+        this.jwtKeys = jwtKeys;
+        this.activeKid = activeKid;
         this.jwtSecret = jwtSecret;
-        this.inactivityMinutes = inactivityMinutes;
+        this.accessTokenMinutes = accessTokenMinutes;
+        this.sessionMaxHours = sessionMaxHours;
         this.allowEphemeralSecret = allowEphemeralSecret;
     }
 
-    public boolean isEnabled() { return enabled; }
+    public String getJwtKeys() { return jwtKeys; }
+    public String getActiveKid() { return activeKid; }
     public String getJwtSecret() { return jwtSecret; }
-    public long getInactivityMinutes() { return inactivityMinutes; }
+    public long getAccessTokenMinutes() { return accessTokenMinutes; }
+    public long getSessionMaxHours() { return sessionMaxHours; }
     public boolean isAllowEphemeralSecret() { return allowEphemeralSecret; }
 }

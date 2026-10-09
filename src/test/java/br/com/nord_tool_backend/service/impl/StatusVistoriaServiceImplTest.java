@@ -1,5 +1,6 @@
 package br.com.nord_tool_backend.service.impl;
 
+import br.com.nord_tool_backend.service.AutorizacaoService;
 import br.com.nord_tool_backend.domain.StatusVistoria;
 import br.com.nord_tool_backend.dto.StatusVistoriaDto;
 import br.com.nord_tool_backend.repository.StatusVistoriaRepository;
@@ -17,12 +18,23 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import br.com.nord_tool_backend.security.Modulo;
+import br.com.nord_tool_backend.security.Acao;
+import br.com.nord_tool_backend.exception.AcessoNegadoException;
+import br.com.nord_tool_backend.exception.NaoAutenticadoException;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 public class StatusVistoriaServiceImplTest {
 
+    @Mock
+
+    private AutorizacaoService autorizacao;
+
+
     @InjectMocks
-    private StatusVistoriaService statusVistoriaService = new StatusVistoriaServiceImpl();
+    private StatusVistoriaServiceImpl statusVistoriaService;
 
     @Mock
     private StatusVistoriaRepository statusVistoriaRepository;
@@ -49,5 +61,14 @@ public class StatusVistoriaServiceImplTest {
         List<StatusVistoriaDto> statusVistoriaDto = statusVistoriaService.listarStatusVistoria();
         assertEquals(lsStatusVistoriaDto, statusVistoriaDto);
         verify(statusVistoriaRepository).listarStatusVistoria();
+    }
+
+    // ---------- autorização ----------
+
+    @Test
+    void semAutenticacaoNaoConsultaODado() {
+        when(autorizacao.exigirAutenticado()).thenThrow(new NaoAutenticadoException("Autenticação necessária"));
+        assertThrows(NaoAutenticadoException.class, () -> statusVistoriaService.listarStatusVistoria());
+        verifyNoInteractions(statusVistoriaRepository);
     }
 }

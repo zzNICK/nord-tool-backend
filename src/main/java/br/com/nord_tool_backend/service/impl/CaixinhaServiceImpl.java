@@ -1,6 +1,12 @@
 package br.com.nord_tool_backend.service.impl;
 
-import br.com.nord_tool_backend.controller.response.NordHttpEnum;
+import br.com.nord_tool_backend.security.Acao;
+import br.com.nord_tool_backend.security.Modulo;
+import br.com.nord_tool_backend.service.AutorizacaoService;
+import br.com.nord_tool_backend.exception.NordException;
+import br.com.nord_tool_backend.exception.ConflitoException;
+import br.com.nord_tool_backend.exception.NaoEncontradoException;
+import br.com.nord_tool_backend.exception.EntradaInvalidaException;
 import br.com.nord_tool_backend.domain.CaixinhaComprovante;
 import br.com.nord_tool_backend.domain.CaixinhaFiltro;
 import br.com.nord_tool_backend.domain.CaixinhaLancamento;
@@ -10,7 +16,6 @@ import br.com.nord_tool_backend.dto.CaixinhaLancamentoDto;
 import br.com.nord_tool_backend.dto.CaixinhaListaDto;
 import br.com.nord_tool_backend.dto.CaixinhaResponsavelDto;
 import br.com.nord_tool_backend.dto.CaixinhaResumoDto;
-import br.com.nord_tool_backend.excepetion.ValidacaoException;
 import br.com.nord_tool_backend.form.CaixinhaLancamentoForm;
 import br.com.nord_tool_backend.form.CaixinhaMarcacaoForm;
 import br.com.nord_tool_backend.form.CaixinhaResponsavelForm;
@@ -36,15 +41,19 @@ public class CaixinhaServiceImpl implements CaixinhaService {
     static final String MSG_CONFLITO = "O lançamento mudou. Sincronize e tente novamente.";
     static final List<String> SITUACOES = Arrays.asList("TODOS", "A_PAGAR", "PAGO", "NAO_LANCADO");
 
+    static final int MAX_COMPROVANTES_POR_LANCAMENTO = 10;
+
     private final CaixinhaRepository repository;
     private final ArmazenamentoService armazenamento;
     private final int maxComprovanteBytes;
+    private final AutorizacaoService autorizacao;
 
     public CaixinhaServiceImpl(CaixinhaRepository repository, ArmazenamentoService armazenamento,
-                               @Value("${nord-tool.caixinha.max-comprovante-bytes:5242880}") int maxComprovanteBytes) {
+                               @Value("${nord-tool.caixinha.max-comprovante-bytes:5242880}") int maxComprovanteBytes, AutorizacaoService autorizacao) {
         this.repository = repository;
         this.armazenamento = armazenamento;
         this.maxComprovanteBytes = maxComprovanteBytes;
+        this.autorizacao = autorizacao;
     }
 
     // ---------- listagem e resumo ----------
@@ -52,6 +61,7 @@ public class CaixinhaServiceImpl implements CaixinhaService {
     @Override
     @Transactional(readOnly = true)
     public CaixinhaListaDto listar(CaixinhaFiltro filtro) {
+        autorizacao.exigir(Modulo.CAIXINHA, Acao.LEITURA);
         validarFiltro(filtro);
         List<CaixinhaLancamentoDto> lancamentos = repository.listarLancamentos(filtro).stream()
                 .map(CaixinhaLancamentoDto::de).collect(Collectors.toList());
@@ -61,6 +71,7 @@ public class CaixinhaServiceImpl implements CaixinhaService {
     @Override
     @Transactional(readOnly = true)
     public CaixinhaResumoDto resumir(CaixinhaFiltro filtro) {
+        autorizacao.exigir(Modulo.CAIXINHA, Acao.LEITURA);
         validarFiltro(filtro);
         CaixinhaRepository.Totais t = repository.resumir(filtro);
         BigDecimal total = t.total == null ? BigDecimal.ZERO : t.total;
@@ -73,6 +84,7 @@ public class CaixinhaServiceImpl implements CaixinhaService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public CaixinhaLancamentoDto criar(CaixinhaLancamentoForm form) {
+        autorizacao.exigir(Modulo.CAIXINHA, Acao.ESCRITA);
         String requisicao = uuidObrigatorio(form.getCdRequisicao(), "Informe o identificador da requisição (cdRequisicao)");
         // Reenvio: devolve o lançamento original sem validar de novo nem duplicar.
         java.util.Optional<Long> existente = repository.buscarLancamentoPorRequisicao(requisicao);
@@ -84,13 +96,14 @@ public class CaixinhaServiceImpl implements CaixinhaService {
         Long id = repository.inserirLancamento(l)
                 // Corrida: outra requisição com o mesmo UUID acabou de gravar.
                 .orElseGet(() -> repository.buscarLancamentoPorRequisicao(requisicao).orElseThrow(() ->
-                        new ValidacaoException(NordHttpEnum.HTTP_400, "Não foi possível salvar o lançamento", null)));
+                        new EntradaInvalidaException("Não foi possível salvar o lançamento")));
         return CaixinhaLancamentoDto.de(lancamento(id));
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public CaixinhaLancamentoDto alterar(Long id, CaixinhaLancamentoForm form) {
+        autorizacao.exigir(Modulo.CAIXINHA, Acao.ESCRITA);
         int versao = versaoObrigatoria(form.getNrVersao());
         CaixinhaLancamento atual = lancamento(id);
         validarResponsavel(form.getIdResponsavel(), atual.getIdResponsavel());
@@ -103,6 +116,7 @@ public class CaixinhaServiceImpl implements CaixinhaService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public CaixinhaLancamentoDto marcar(Long id, CaixinhaMarcacaoForm form) {
+        autorizacao.exigir(Modulo.CAIXINHA, Acao.ESCRITA);
         int versao = versaoObrigatoria(form.getNrVersao());
         CaixinhaLancamento atual = lancamento(id);
         boolean lancado = form.getLancado() != null ? form.getLancado() : Boolean.TRUE.equals(atual.getInLancado());
@@ -114,6 +128,7 @@ public class CaixinhaServiceImpl implements CaixinhaService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void excluir(Long id, Integer nrVersao) {
+        autorizacao.exigir(Modulo.CAIXINHA, Acao.ESCRITA);
         int versao = versaoObrigatoria(nrVersao);
         lancamento(id);
         List<Long> arquivos = repository.listarComprovantes(id).stream()
@@ -128,12 +143,14 @@ public class CaixinhaServiceImpl implements CaixinhaService {
     @Override
     @Transactional(readOnly = true)
     public List<CaixinhaResponsavelDto> listarResponsaveis() {
+        autorizacao.exigir(Modulo.CAIXINHA, Acao.LEITURA);
         return repository.listarResponsaveis().stream().map(CaixinhaResponsavelDto::de).collect(Collectors.toList());
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public CaixinhaResponsavelDto criarResponsavel(CaixinhaResponsavelForm form) {
+        autorizacao.exigir(Modulo.CAIXINHA, Acao.ESCRITA);
         String nome = nomeResponsavel(form.getNmResponsavel(), null);
         CaixinhaResponsavel r = new CaixinhaResponsavel();
         r.setNmResponsavel(nome);
@@ -145,6 +162,7 @@ public class CaixinhaServiceImpl implements CaixinhaService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public CaixinhaResponsavelDto atualizarResponsavel(Long id, CaixinhaResponsavelForm form) {
+        autorizacao.exigir(Modulo.CAIXINHA, Acao.ESCRITA);
         CaixinhaResponsavel atual = responsavel(id);
         if (form.getNmResponsavel() != null) atual.setNmResponsavel(nomeResponsavel(form.getNmResponsavel(), id));
         if (form.getInAtivo() != null) atual.setInAtivo(form.getInAtivo());
@@ -157,6 +175,7 @@ public class CaixinhaServiceImpl implements CaixinhaService {
     @Override
     @Transactional(readOnly = true)
     public List<CaixinhaComprovanteDto> listarComprovantes(Long idLancamento) {
+        autorizacao.exigir(Modulo.CAIXINHA, Acao.LEITURA);
         lancamento(idLancamento);
         return repository.listarComprovantes(idLancamento).stream().map(CaixinhaComprovanteDto::de).collect(Collectors.toList());
     }
@@ -164,12 +183,16 @@ public class CaixinhaServiceImpl implements CaixinhaService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public CaixinhaComprovanteDto anexarComprovante(Long idLancamento, String nomeArquivo, byte[] bytes, String cdRequisicao) {
+        autorizacao.exigir(Modulo.CAIXINHA, Acao.ESCRITA);
         lancamento(idLancamento);
         String requisicao = uuidOpcional(cdRequisicao);
         if (requisicao != null) {
             // Reenvio do mesmo arquivo: devolve o comprovante original, sem gravar outro PDF.
             java.util.Optional<Long> existente = repository.buscarComprovantePorRequisicao(requisicao);
             if (existente.isPresent()) return CaixinhaComprovanteDto.de(comprovante(existente.get()));
+        }
+        if (repository.listarComprovantes(idLancamento).size() >= MAX_COMPROVANTES_POR_LANCAMENTO) {
+            throw new EntradaInvalidaException("O lançamento já tem o máximo de " + MAX_COMPROVANTES_POR_LANCAMENTO + " comprovantes");
         }
         String contentType = ArquivoValidador.validarComprovantePdf(nomeArquivo, bytes, maxComprovanteBytes);
         Long idArquivo = armazenamento.salvar(nomeArquivo, contentType, bytes);
@@ -180,6 +203,7 @@ public class CaixinhaServiceImpl implements CaixinhaService {
     @Override
     @Transactional(readOnly = true)
     public ArquivoDownload baixarComprovante(Long idComprovante) {
+        autorizacao.exigir(Modulo.CAIXINHA, Acao.LEITURA);
         CaixinhaComprovante c = comprovante(idComprovante);
         long versao = c.getDhCriacao() == null ? 0L : c.getDhCriacao().atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
         return new ArquivoDownload(armazenamento.abrir(c.getIdArquivo()), versao);
@@ -188,6 +212,7 @@ public class CaixinhaServiceImpl implements CaixinhaService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void excluirComprovante(Long idComprovante) {
+        autorizacao.exigir(Modulo.CAIXINHA, Acao.ESCRITA);
         CaixinhaComprovante c = comprovante(idComprovante);
         repository.deletarComprovante(idComprovante);
         armazenamento.apagar(c.getIdArquivo());
@@ -197,25 +222,25 @@ public class CaixinhaServiceImpl implements CaixinhaService {
 
     private CaixinhaLancamento lancamento(Long id) {
         return repository.buscarLancamento(id)
-                .orElseThrow(() -> new ValidacaoException(NordHttpEnum.HTTP_404, "Lançamento não encontrado", null));
+                .orElseThrow(() -> new NaoEncontradoException("Lançamento não encontrado"));
     }
 
     private CaixinhaResponsavel responsavel(Long id) {
         return repository.buscarResponsavel(id)
-                .orElseThrow(() -> new ValidacaoException(NordHttpEnum.HTTP_404, "Responsável não encontrado", null));
+                .orElseThrow(() -> new NaoEncontradoException("Responsável não encontrado"));
     }
 
     private CaixinhaComprovante comprovante(Long id) {
         return repository.buscarComprovante(id)
-                .orElseThrow(() -> new ValidacaoException(NordHttpEnum.HTTP_404, "Comprovante não encontrado", null));
+                .orElseThrow(() -> new NaoEncontradoException("Comprovante não encontrado"));
     }
 
-    private static ValidacaoException conflito() {
-        return new ValidacaoException(NordHttpEnum.HTTP_409, MSG_CONFLITO, null);
+    private static NordException conflito() {
+        return new ConflitoException(MSG_CONFLITO);
     }
 
-    private static ValidacaoException invalido(String mensagem) {
-        return new ValidacaoException(NordHttpEnum.HTTP_400, mensagem, null);
+    private static NordException invalido(String mensagem) {
+        return new EntradaInvalidaException(mensagem);
     }
 
     private static int versaoObrigatoria(Integer nrVersao) {

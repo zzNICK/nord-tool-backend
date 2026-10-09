@@ -6,8 +6,9 @@ spring:
     active: ${SPRING_PROFILES_ACTIVE:local}
   servlet:
     multipart:
-      max-file-size: 50MB
-      max-request-size: 50MB
+      # Maior arquivo aceito: PDF de termo e contrato (15 MB). Cada tipo tem o seu limite em ArquivoValidador.
+      max-file-size: 16MB
+      max-request-size: 17MB
 
 server:
   # O contrato de erro é do GlobalExceptionHandler; a página de erro padrão nunca expõe detalhes.
@@ -27,10 +28,14 @@ nord-tool:
     # Origens do frontend autorizadas; cada perfil define a sua lista (sem padrão aberto).
     allowed-origins:
   security:
-    # Chave de liga/desliga: false mantém a API aberta (publicar backend antes do frontend)
-    enabled: ${NORD_SECURITY_ENABLED:false}
+    # Autenticação sempre exigida. Fora do perfil local o startup falha sem chave JWT.
+    # NORD_JWT_KEYS="kid1:<base64 de 32+ bytes>;kid2:..." e NORD_JWT_ACTIVE_KID=kid1 (rotação: ver README).
+    jwt-keys: ${NORD_JWT_KEYS:}
+    active-kid: ${NORD_JWT_ACTIVE_KID:}
+    # Compatibilidade: chave única em texto (32+ bytes), usada só se NORD_JWT_KEYS estiver vazia.
     jwt-secret: ${NORD_JWT_SECRET:}
-    inactivity-minutes: ${NORD_INACTIVITY_MINUTES:30}
+    access-token-minutes: ${NORD_ACCESS_TOKEN_MINUTES:15}
+    session-max-hours: ${NORD_SESSION_MAX_HOURS:12}
   admin:
     # Bootstrap do primeiro ADMIN (só roda com a tabela usuario vazia). Remover as variáveis depois.
     email: ${NORD_ADMIN_EMAIL:}

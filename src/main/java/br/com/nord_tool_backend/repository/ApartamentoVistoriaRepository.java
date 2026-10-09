@@ -2,6 +2,7 @@ package br.com.nord_tool_backend.repository;
 
 import br.com.nord_tool_backend.domain.ApartamentoVistoria;
 import br.com.nord_tool_backend.domain.InfoGeralApartamentoVistoria;
+import br.com.nord_tool_backend.domain.OrdenacaoApartamentoVistoria;
 import br.com.nord_tool_backend.dto.ApartamentoVistoriaDto;
 import br.com.nord_tool_backend.dto.ApartamentoVistoriaFiltroDto;
 
@@ -15,7 +16,8 @@ public interface ApartamentoVistoriaRepository {
     ApartamentoVistoria buscarApartamentoVistoria(Long id);
     List<ApartamentoVistoria> listarApartamentoVistoria();
     void salvarEmLote(List<ApartamentoVistoria> lsApartamentoVistoria);
-    List<ApartamentoVistoriaDto> listarApartamentoVistoriaFiltrado(String query, ApartamentoVistoriaFiltroDto apartamentoVistoriaFiltroDto,
-                                                                   String filtrarTodos, int nrPagina, int nrQuantidadePorPagina);
+    List<ApartamentoVistoriaDto> listarApartamentoVistoriaFiltrado(ApartamentoVistoriaFiltroDto apartamentoVistoriaFiltroDto,
+                                                                   String filtrarTodos, int nrPagina, int nrQuantidadePorPagina,
+                                                                   OrdenacaoApartamentoVistoria ordenacao);
     List<InfoGeralApartamentoVistoria> listarInfoGeralApartamentoVistoria(String dtiApartamentoVistoriaFiltro, String dtfApartamentoVistoriaFiltro);
 }

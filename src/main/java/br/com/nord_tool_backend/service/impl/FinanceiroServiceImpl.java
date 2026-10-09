@@ -1,6 +1,12 @@
 package br.com.nord_tool_backend.service.impl;
 
-import br.com.nord_tool_backend.controller.response.NordHttpEnum;
+import br.com.nord_tool_backend.security.Acao;
+import br.com.nord_tool_backend.security.Modulo;
+import br.com.nord_tool_backend.service.AutorizacaoService;
+import br.com.nord_tool_backend.exception.NordException;
+import br.com.nord_tool_backend.exception.ConflitoException;
+import br.com.nord_tool_backend.exception.NaoEncontradoException;
+import br.com.nord_tool_backend.exception.EntradaInvalidaException;
 import br.com.nord_tool_backend.domain.FinanceiroCategoria;
 import br.com.nord_tool_backend.domain.FinanceiroFiltro;
 import br.com.nord_tool_backend.domain.FinanceiroLancamento;
@@ -14,7 +20,6 @@ import br.com.nord_tool_backend.dto.FinanceiroLancamentoDto;
 import br.com.nord_tool_backend.dto.FinanceiroListaDto;
 import br.com.nord_tool_backend.dto.FinanceiroPessoaDto;
 import br.com.nord_tool_backend.dto.FinanceiroResumoDto;
-import br.com.nord_tool_backend.excepetion.ValidacaoException;
 import br.com.nord_tool_backend.form.FinanceiroCategoriaForm;
 import br.com.nord_tool_backend.form.FinanceiroLancamentoForm;
 import br.com.nord_tool_backend.form.FinanceiroPessoaForm;
@@ -49,11 +54,13 @@ public class FinanceiroServiceImpl implements FinanceiroService {
     private final FinanceiroRepository repository;
     private final FinanceiroProjecaoRepository projecaoRepository;
     private final Clock clock;
+    private final AutorizacaoService autorizacao;
 
-    public FinanceiroServiceImpl(FinanceiroRepository repository, FinanceiroProjecaoRepository projecaoRepository, Clock clock) {
+    public FinanceiroServiceImpl(FinanceiroRepository repository, FinanceiroProjecaoRepository projecaoRepository, Clock clock, AutorizacaoService autorizacao) {
         this.repository = repository;
         this.projecaoRepository = projecaoRepository;
         this.clock = clock;
+        this.autorizacao = autorizacao;
     }
 
     // ---------- listagem e resumo ----------
@@ -61,6 +68,7 @@ public class FinanceiroServiceImpl implements FinanceiroService {
     @Override
     @Transactional(readOnly = true)
     public FinanceiroListaDto listar(FinanceiroFiltro filtro) {
+        autorizacao.exigir(Modulo.FINANCEIRO, Acao.LEITURA);
         validarFiltro(filtro);
         List<FinanceiroLancamentoDto> lancamentos = repository.listarLancamentos(filtro).stream()
                 .map(FinanceiroLancamentoDto::de).collect(Collectors.toList());
@@ -70,6 +78,7 @@ public class FinanceiroServiceImpl implements FinanceiroService {
     @Override
     @Transactional(readOnly = true)
     public FinanceiroResumoDto resumir(FinanceiroFiltro filtro) {
+        autorizacao.exigir(Modulo.FINANCEIRO, Acao.LEITURA);
         validarFiltro(filtro);
         return resumo(filtro);
     }
@@ -87,6 +96,7 @@ public class FinanceiroServiceImpl implements FinanceiroService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public List<FinanceiroLancamentoDto> criar(FinanceiroLancamentoForm form, Long idUsuario) {
+        autorizacao.exigir(Modulo.FINANCEIRO, Acao.ESCRITA);
         String requisicao = uuidObrigatorio(form.getCdRequisicao());
         int parcelas = form.getQtParcelas() == null ? 1 : form.getQtParcelas();
         if (parcelas < 1 || parcelas > MAX_PARCELAS) throw invalido("O número de parcelas deve ser de 1 a " + MAX_PARCELAS);
@@ -115,7 +125,7 @@ public class FinanceiroServiceImpl implements FinanceiroService {
             Long id = repository.inserirLancamento(l)
                     // Corrida: outra requisição com o mesmo UUID acabou de gravar.
                     .orElseGet(() -> repository.buscarLancamentoPorRequisicao(l.getCdRequisicao()).orElseThrow(() ->
-                            new ValidacaoException(NordHttpEnum.HTTP_400, "Não foi possível salvar o lançamento", null)));
+                            new EntradaInvalidaException("Não foi possível salvar o lançamento")));
             registrarLeitura(categoria, id, l.getVlLancamento(), idUsuario);
             criados.add(FinanceiroLancamentoDto.de(lancamento(id)));
         }
@@ -140,6 +150,7 @@ public class FinanceiroServiceImpl implements FinanceiroService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public FinanceiroLancamentoDto alterar(Long id, FinanceiroLancamentoForm form, Long idUsuario) {
+        autorizacao.exigir(Modulo.FINANCEIRO, Acao.ESCRITA);
         int versao = versaoObrigatoria(form.getNrVersao());
         FinanceiroLancamento atual = lancamento(id);
         FinanceiroCategoria categoria = validarCategoria(form.getIdCategoria(), atual.getIdCategoria());
@@ -157,6 +168,7 @@ public class FinanceiroServiceImpl implements FinanceiroService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public FinanceiroLancamentoDto marcarRealizado(Long id, FinanceiroRealizadoForm form) {
+        autorizacao.exigir(Modulo.FINANCEIRO, Acao.ESCRITA);
         int versao = versaoObrigatoria(form.getNrVersao());
         exigirMesAberto(lancamento(id).getDtCompetencia());
         if (repository.marcarRealizado(id, Boolean.TRUE.equals(form.getInRealizado()), versao) == 0) throw conflito();
@@ -166,6 +178,7 @@ public class FinanceiroServiceImpl implements FinanceiroService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void excluir(Long id, Integer nrVersao) {
+        autorizacao.exigir(Modulo.FINANCEIRO, Acao.ESCRITA);
         int versao = versaoObrigatoria(nrVersao);
         exigirMesAberto(lancamento(id).getDtCompetencia());
         if (repository.deletarLancamento(id, versao) == 0) throw conflito();
@@ -176,12 +189,14 @@ public class FinanceiroServiceImpl implements FinanceiroService {
     @Override
     @Transactional(readOnly = true)
     public List<FinanceiroPessoaDto> listarPessoas() {
+        autorizacao.exigir(Modulo.FINANCEIRO, Acao.LEITURA);
         return repository.listarPessoas().stream().map(FinanceiroPessoaDto::de).collect(Collectors.toList());
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public FinanceiroPessoaDto criarPessoa(FinanceiroPessoaForm form) {
+        autorizacao.exigir(Modulo.FINANCEIRO, Acao.ESCRITA);
         FinanceiroPessoa p = new FinanceiroPessoa();
         p.setNmPessoa(nomePessoa(form.getNmPessoa(), null));
         p.setInCompartilhado(Boolean.TRUE.equals(form.getInCompartilhado()));
@@ -194,6 +209,7 @@ public class FinanceiroServiceImpl implements FinanceiroService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public FinanceiroPessoaDto atualizarPessoa(Long id, FinanceiroPessoaForm form) {
+        autorizacao.exigir(Modulo.FINANCEIRO, Acao.ESCRITA);
         FinanceiroPessoa atual = pessoa(id);
         if (form.getNmPessoa() != null) atual.setNmPessoa(nomePessoa(form.getNmPessoa(), id));
         if (form.getInCompartilhado() != null) atual.setInCompartilhado(form.getInCompartilhado());
@@ -209,12 +225,14 @@ public class FinanceiroServiceImpl implements FinanceiroService {
     @Override
     @Transactional(readOnly = true)
     public List<FinanceiroCategoriaDto> listarCategorias() {
+        autorizacao.exigir(Modulo.FINANCEIRO, Acao.LEITURA);
         return repository.listarCategorias().stream().map(FinanceiroCategoriaDto::de).collect(Collectors.toList());
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public FinanceiroCategoriaDto criarCategoria(FinanceiroCategoriaForm form) {
+        autorizacao.exigir(Modulo.FINANCEIRO, Acao.ESCRITA);
         FinanceiroCategoria c = new FinanceiroCategoria();
         c.setCdTipo(tipo(form.getCdTipo()).name());
         c.setCdProjecao(projecao(form.getCdProjecao()).name());
@@ -231,6 +249,7 @@ public class FinanceiroServiceImpl implements FinanceiroService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public FinanceiroCategoriaDto atualizarCategoria(Long id, FinanceiroCategoriaForm form) {
+        autorizacao.exigir(Modulo.FINANCEIRO, Acao.ESCRITA);
         FinanceiroCategoria atual = categoria(id);
         if (form.getCdTipo() != null && !tipo(form.getCdTipo()).name().equals(atual.getCdTipo())) {
             if (repository.contarLancamentosDaCategoria(id) > 0) {
@@ -258,25 +277,25 @@ public class FinanceiroServiceImpl implements FinanceiroService {
 
     private FinanceiroLancamento lancamento(Long id) {
         return repository.buscarLancamento(id)
-                .orElseThrow(() -> new ValidacaoException(NordHttpEnum.HTTP_404, "Lançamento não encontrado", null));
+                .orElseThrow(() -> new NaoEncontradoException("Lançamento não encontrado"));
     }
 
     private FinanceiroPessoa pessoa(Long id) {
         return repository.buscarPessoa(id)
-                .orElseThrow(() -> new ValidacaoException(NordHttpEnum.HTTP_404, "Pessoa não encontrada", null));
+                .orElseThrow(() -> new NaoEncontradoException("Pessoa não encontrada"));
     }
 
     private FinanceiroCategoria categoria(Long id) {
         return repository.buscarCategoria(id)
-                .orElseThrow(() -> new ValidacaoException(NordHttpEnum.HTTP_404, "Categoria não encontrada", null));
+                .orElseThrow(() -> new NaoEncontradoException("Categoria não encontrada"));
     }
 
-    private static ValidacaoException conflito() {
-        return new ValidacaoException(NordHttpEnum.HTTP_409, MSG_CONFLITO, null);
+    private static NordException conflito() {
+        return new ConflitoException(MSG_CONFLITO);
     }
 
-    private static ValidacaoException invalido(String mensagem) {
-        return new ValidacaoException(NordHttpEnum.HTTP_400, mensagem, null);
+    private static NordException invalido(String mensagem) {
+        return new EntradaInvalidaException(mensagem);
     }
 
     private static BigDecimal zero(BigDecimal valor) {

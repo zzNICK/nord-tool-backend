@@ -1,91 +1,72 @@
 package br.com.nord_tool_backend.repository.impl;
 
-import br.com.nord_tool_backend.controller.response.NordHttpEnum;
 import br.com.nord_tool_backend.domain.Colaborador;
 import br.com.nord_tool_backend.dto.ColaboradorDto;
-import br.com.nord_tool_backend.excepetion.ValidacaoException;
 import br.com.nord_tool_backend.repository.ColaboradorRepository;
-import br.com.nord_tool_backend.repository.RepositoryJdbcOperationsSql;
-import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.exception.ExceptionUtils;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.PropertySource;
+import br.com.nord_tool_backend.repository.jdbc.JdbcExecutor;
+import br.com.nord_tool_backend.repository.jdbc.JdbcSuporte;
+import br.com.nord_tool_backend.repository.jdbc.SqlQueries;
 import org.springframework.jdbc.core.BeanPropertyRowMapper;
+import org.springframework.jdbc.core.namedparam.BeanPropertySqlParameterSource;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
 
 @Repository
-@Slf4j
-@PropertySource("classpath:query/colaborador.properties")
-public class ColaboradorRepositoryImpl extends RepositoryJdbcOperationsSql<Colaborador> implements ColaboradorRepository {
-    private static final String ERRO_SALVAR = "Erro ao salvar colaborador";
-    private static final String ERRO_ALTERAR = "Erro ao alterar colaborador";
-    private static final String ERRO_DELETAR = "Erro ao deletar colaborador";
-    private static final String ERRO_BUSCAR = "Erro ao buscar colaborador";
-    private static final String ERRO_LISTAR = "Erro ao listar colaboradores";
+public class ColaboradorRepositoryImpl implements ColaboradorRepository {
 
-    @Value("${SPI.COLABORADOR.INSERIR}") private String querySalvar;
-    @Value("${SPU.COLABORADOR.ALTERAR}") private String queryAlterar;
-    @Value("${SPD.COLABORADOR.DELETAR}") private String queryDeletar;
-    @Value("${SPS.COLABORADOR.BUSCAR_POR_ID}") private String queryBuscarPorId;
-    @Value("${SPS.COLABORADOR.LISTAR}") private String queryListar;
+    private final NamedParameterJdbcTemplate jdbc;
+    private final JdbcExecutor executor;
+    private final String qInserir;
+    private final String qAlterar;
+    private final String qDeletar;
+    private final String qBuscarPorId;
+    private final String qListar;
 
-    @Override
-    public ColaboradorDto salvarColaborador(Colaborador colaborador) {
-        try {
-            Colaborador salvo = salvar(querySalvar, colaborador, "id_user");
-            return ColaboradorDto.converterToDto(buscarPorIdInterno(salvo.getId()));
-        } catch (Exception ex) {
-            throw tratarErro(ERRO_SALVAR, ex);
-        }
+    public ColaboradorRepositoryImpl(NamedParameterJdbcTemplate jdbc, JdbcExecutor executor, SqlQueries queries) {
+        this.jdbc = jdbc;
+        this.executor = executor;
+        this.qInserir = queries.get("SPI.COLABORADOR.INSERIR");
+        this.qAlterar = queries.get("SPU.COLABORADOR.ALTERAR");
+        this.qDeletar = queries.get("SPD.COLABORADOR.DELETAR");
+        this.qBuscarPorId = queries.get("SPS.COLABORADOR.BUSCAR_POR_ID");
+        this.qListar = queries.get("SPS.COLABORADOR.LISTAR");
     }
 
     @Override
-    public ColaboradorDto alterarColaborador(Colaborador colaborador) {
-        try {
-            alterar(queryAlterar, colaborador);
-            return ColaboradorDto.converterToDto(buscarPorIdInterno(colaborador.getId()));
-        } catch (Exception ex) {
-            throw tratarErro(ERRO_ALTERAR, ex);
-        }
+    public ColaboradorDto salvarColaborador(Colaborador entidade) {
+        return executor.executar("Salvar colaborador", () -> {
+            Long id = JdbcSuporte.inserir(jdbc, qInserir, new BeanPropertySqlParameterSource(entidade), "id_user");
+            return ColaboradorDto.converterToDto(buscar(id));
+        });
+    }
+
+    @Override
+    public ColaboradorDto alterarColaborador(Colaborador entidade) {
+        return executor.executar("Alterar colaborador", () -> {
+            jdbc.update(qAlterar, new BeanPropertySqlParameterSource(entidade));
+            return ColaboradorDto.converterToDto(buscar(entidade.getId()));
+        });
     }
 
     @Override
     public void deletarColaborador(Long id) {
-        try {
-            deletar(queryDeletar, new MapSqlParameterSource("id", id));
-        } catch (Exception ex) {
-            throw tratarErro(ERRO_DELETAR, ex);
-        }
+        executor.executar("Excluir colaborador", () -> jdbc.update(qDeletar, new MapSqlParameterSource("id", id)));
     }
 
     @Override
     public Colaborador buscarPorIdColaborador(Long id) {
-        try {
-            return buscarPorIdInterno(id);
-        } catch (Exception ex) {
-            throw tratarErro(ERRO_BUSCAR, ex);
-        }
+        return executor.executar("Buscar colaborador", () -> buscar(id));
     }
 
     @Override
     public List<Colaborador> listarColaboradores() {
-        try {
-            return buscarTodos(queryListar, BeanPropertyRowMapper.newInstance(Colaborador.class));
-        } catch (Exception ex) {
-            throw tratarErro(ERRO_LISTAR, ex);
-        }
+        return executor.executar("Listar colaboradores", () -> jdbc.query(qListar, BeanPropertyRowMapper.newInstance(Colaborador.class)));
     }
 
-    private Colaborador buscarPorIdInterno(Long id) {
-        return buscarPorId(queryBuscarPorId, new MapSqlParameterSource("id", id),
-                BeanPropertyRowMapper.newInstance(Colaborador.class));
-    }
-
-    private ValidacaoException tratarErro(String mensagem, Exception ex) {
-        log.error(mensagem, ex);
-        return new ValidacaoException(NordHttpEnum.HTTP_400, mensagem, ExceptionUtils.getMessage(ex));
+    private Colaborador buscar(Long id) {
+        return jdbc.queryForObject(qBuscarPorId, new MapSqlParameterSource("id", id), BeanPropertyRowMapper.newInstance(Colaborador.class));
     }
 }

@@ -1,17 +1,12 @@
 package br.com.nord_tool_backend.repository.impl;
 
-import br.com.nord_tool_backend.controller.response.NordHttpEnum;
 import br.com.nord_tool_backend.domain.CaixinhaComprovante;
 import br.com.nord_tool_backend.domain.CaixinhaFiltro;
 import br.com.nord_tool_backend.domain.CaixinhaLancamento;
 import br.com.nord_tool_backend.domain.CaixinhaResponsavel;
-import br.com.nord_tool_backend.excepetion.ValidacaoException;
 import br.com.nord_tool_backend.repository.CaixinhaRepository;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.exception.ExceptionUtils;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.PropertySource;
+import br.com.nord_tool_backend.repository.jdbc.JdbcExecutor;
+import br.com.nord_tool_backend.repository.jdbc.SqlQueries;
 import org.springframework.jdbc.core.BeanPropertyRowMapper;
 import org.springframework.jdbc.core.namedparam.BeanPropertySqlParameterSource;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -25,54 +20,75 @@ import java.math.BigDecimal;
 import java.sql.Date;
 import java.util.List;
 import java.util.Optional;
-import java.util.function.Supplier;
 
-@Repository @Slf4j @RequiredArgsConstructor
-@PropertySource("classpath:query/caixinha.properties")
+@Repository
 public class CaixinhaRepositoryImpl implements CaixinhaRepository {
 
     private static final String ORDEM_LANCAMENTOS = " ORDER BY l.dt_lancamento DESC, l.id_lancamento DESC";
 
     private final NamedParameterJdbcTemplate jdbc;
+    private final JdbcExecutor executor;
 
-    @Value("${SPS.CAIXINHA.RESPONSAVEL.LISTAR}") private String qRespListar;
-    @Value("${SPS.CAIXINHA.RESPONSAVEL.BUSCAR}") private String qRespBuscar;
-    @Value("${SPI.CAIXINHA.RESPONSAVEL.INSERIR}") private String qRespInserir;
-    @Value("${SPU.CAIXINHA.RESPONSAVEL.ALTERAR}") private String qRespAlterar;
+    private final String qRespListar;
+    private final String qRespBuscar;
+    private final String qRespInserir;
+    private final String qRespAlterar;
 
-    @Value("${SPS.CAIXINHA.LANCAMENTO.LISTAR}") private String qLancListar;
-    @Value("${SPS.CAIXINHA.LANCAMENTO.BUSCAR}") private String qLancBuscar;
-    @Value("${SPS.CAIXINHA.LANCAMENTO.BUSCAR_REQUISICAO}") private String qLancRequisicao;
-    @Value("${SPI.CAIXINHA.LANCAMENTO.INSERIR}") private String qLancInserir;
-    @Value("${SPU.CAIXINHA.LANCAMENTO.ALTERAR}") private String qLancAlterar;
-    @Value("${SPU.CAIXINHA.LANCAMENTO.MARCAR}") private String qLancMarcar;
-    @Value("${SPD.CAIXINHA.LANCAMENTO.DELETAR}") private String qLancDeletar;
-    @Value("${SPS.CAIXINHA.LANCAMENTO.RESUMO}") private String qLancResumo;
+    private final String qLancListar;
+    private final String qLancBuscar;
+    private final String qLancRequisicao;
+    private final String qLancInserir;
+    private final String qLancAlterar;
+    private final String qLancMarcar;
+    private final String qLancDeletar;
+    private final String qLancResumo;
 
-    @Value("${SPS.CAIXINHA.COMPROVANTE.LISTAR}") private String qCompListar;
-    @Value("${SPS.CAIXINHA.COMPROVANTE.BUSCAR}") private String qCompBuscar;
-    @Value("${SPS.CAIXINHA.COMPROVANTE.BUSCAR_REQUISICAO}") private String qCompRequisicao;
-    @Value("${SPI.CAIXINHA.COMPROVANTE.INSERIR}") private String qCompInserir;
-    @Value("${SPD.CAIXINHA.COMPROVANTE.DELETAR}") private String qCompDeletar;
+    private final String qCompListar;
+    private final String qCompBuscar;
+    private final String qCompRequisicao;
+    private final String qCompInserir;
+    private final String qCompDeletar;
+
+    public CaixinhaRepositoryImpl(NamedParameterJdbcTemplate jdbc, JdbcExecutor executor, SqlQueries queries) {
+        this.jdbc = jdbc;
+        this.executor = executor;
+        this.qRespListar = queries.get("SPS.CAIXINHA.RESPONSAVEL.LISTAR");
+        this.qRespBuscar = queries.get("SPS.CAIXINHA.RESPONSAVEL.BUSCAR");
+        this.qRespInserir = queries.get("SPI.CAIXINHA.RESPONSAVEL.INSERIR");
+        this.qRespAlterar = queries.get("SPU.CAIXINHA.RESPONSAVEL.ALTERAR");
+        this.qLancListar = queries.get("SPS.CAIXINHA.LANCAMENTO.LISTAR");
+        this.qLancBuscar = queries.get("SPS.CAIXINHA.LANCAMENTO.BUSCAR");
+        this.qLancRequisicao = queries.get("SPS.CAIXINHA.LANCAMENTO.BUSCAR_REQUISICAO");
+        this.qLancInserir = queries.get("SPI.CAIXINHA.LANCAMENTO.INSERIR");
+        this.qLancAlterar = queries.get("SPU.CAIXINHA.LANCAMENTO.ALTERAR");
+        this.qLancMarcar = queries.get("SPU.CAIXINHA.LANCAMENTO.MARCAR");
+        this.qLancDeletar = queries.get("SPD.CAIXINHA.LANCAMENTO.DELETAR");
+        this.qLancResumo = queries.get("SPS.CAIXINHA.LANCAMENTO.RESUMO");
+        this.qCompListar = queries.get("SPS.CAIXINHA.COMPROVANTE.LISTAR");
+        this.qCompBuscar = queries.get("SPS.CAIXINHA.COMPROVANTE.BUSCAR");
+        this.qCompRequisicao = queries.get("SPS.CAIXINHA.COMPROVANTE.BUSCAR_REQUISICAO");
+        this.qCompInserir = queries.get("SPI.CAIXINHA.COMPROVANTE.INSERIR");
+        this.qCompDeletar = queries.get("SPD.CAIXINHA.COMPROVANTE.DELETAR");
+    }
 
     // ---------- responsáveis ----------
 
     @Override
     public List<CaixinhaResponsavel> listarResponsaveis() {
-        return executar("Erro ao listar responsáveis", () ->
+        return executor.executar("Erro ao listar responsáveis", () ->
                 jdbc.query(qRespListar, BeanPropertyRowMapper.newInstance(CaixinhaResponsavel.class)));
     }
 
     @Override
     public Optional<CaixinhaResponsavel> buscarResponsavel(Long id) {
-        return executar("Erro ao buscar responsável", () ->
+        return executor.executar("Erro ao buscar responsável", () ->
                 jdbc.query(qRespBuscar, new MapSqlParameterSource("id", id),
                         BeanPropertyRowMapper.newInstance(CaixinhaResponsavel.class)).stream().findFirst());
     }
 
     @Override
     public Long inserirResponsavel(CaixinhaResponsavel r) {
-        return executar("Erro ao salvar responsável", () -> {
+        return executor.executar("Erro ao salvar responsável", () -> {
             KeyHolder keys = new GeneratedKeyHolder();
             jdbc.update(qRespInserir, new BeanPropertySqlParameterSource(r), keys, new String[]{"id_responsavel"});
             return keys.getKey().longValue();
@@ -81,7 +97,7 @@ public class CaixinhaRepositoryImpl implements CaixinhaRepository {
 
     @Override
     public void alterarResponsavel(CaixinhaResponsavel r) {
-        executar("Erro ao alterar responsável", () -> jdbc.update(qRespAlterar, new BeanPropertySqlParameterSource(r)));
+        executor.executar("Erro ao alterar responsável", () -> jdbc.update(qRespAlterar, new BeanPropertySqlParameterSource(r)));
     }
 
     // ---------- lançamentos ----------
@@ -90,27 +106,27 @@ public class CaixinhaRepositoryImpl implements CaixinhaRepository {
     public List<CaixinhaLancamento> listarLancamentos(CaixinhaFiltro filtro) {
         MapSqlParameterSource params = new MapSqlParameterSource();
         String sql = qLancListar + condicoes(filtro, params) + ORDEM_LANCAMENTOS;
-        return executar("Erro ao listar lançamentos", () ->
+        return executor.executar("Erro ao listar lançamentos", () ->
                 jdbc.query(sql, params, BeanPropertyRowMapper.newInstance(CaixinhaLancamento.class)));
     }
 
     @Override
     public Optional<CaixinhaLancamento> buscarLancamento(Long id) {
-        return executar("Erro ao buscar lançamento", () ->
+        return executor.executar("Erro ao buscar lançamento", () ->
                 jdbc.query(qLancBuscar, new MapSqlParameterSource("id", id),
                         BeanPropertyRowMapper.newInstance(CaixinhaLancamento.class)).stream().findFirst());
     }
 
     @Override
     public Optional<Long> buscarLancamentoPorRequisicao(String cdRequisicao) {
-        return executar("Erro ao buscar lançamento", () ->
+        return executor.executar("Erro ao buscar lançamento", () ->
                 jdbc.queryForList(qLancRequisicao, new MapSqlParameterSource("cdRequisicao", cdRequisicao), Long.class)
                         .stream().findFirst());
     }
 
     @Override
     public Optional<Long> inserirLancamento(CaixinhaLancamento l) {
-        return executar("Erro ao salvar lançamento", () ->
+        return executor.executar("Erro ao salvar lançamento", () ->
                 jdbc.queryForList(qLancInserir, new MapSqlParameterSource()
                         .addValue("cdRequisicao", l.getCdRequisicao())
                         .addValue("dtLancamento", Date.valueOf(l.getDtLancamento()))
@@ -124,7 +140,7 @@ public class CaixinhaRepositoryImpl implements CaixinhaRepository {
 
     @Override
     public int alterarLancamento(CaixinhaLancamento l, int nrVersao) {
-        return executar("Erro ao alterar lançamento", () ->
+        return executor.executar("Erro ao alterar lançamento", () ->
                 jdbc.update(qLancAlterar, new MapSqlParameterSource()
                         .addValue("id", l.getId())
                         .addValue("dtLancamento", Date.valueOf(l.getDtLancamento()))
@@ -138,14 +154,14 @@ public class CaixinhaRepositoryImpl implements CaixinhaRepository {
 
     @Override
     public int marcarLancamento(Long id, boolean lancado, boolean pago, int nrVersao) {
-        return executar("Erro ao atualizar lançamento", () ->
+        return executor.executar("Erro ao atualizar lançamento", () ->
                 jdbc.update(qLancMarcar, new MapSqlParameterSource().addValue("id", id)
                         .addValue("inLancado", lancado).addValue("inPago", pago).addValue("nrVersao", nrVersao)));
     }
 
     @Override
     public int deletarLancamento(Long id, int nrVersao) {
-        return executar("Erro ao excluir lançamento", () ->
+        return executor.executar("Erro ao excluir lançamento", () ->
                 jdbc.update(qLancDeletar, new MapSqlParameterSource().addValue("id", id).addValue("nrVersao", nrVersao)));
     }
 
@@ -153,7 +169,7 @@ public class CaixinhaRepositoryImpl implements CaixinhaRepository {
     public Totais resumir(CaixinhaFiltro filtro) {
         MapSqlParameterSource params = new MapSqlParameterSource();
         String sql = qLancResumo + condicoes(filtro, params);
-        return executar("Erro ao calcular o resumo da Caixinha", () ->
+        return executor.executar("Erro ao calcular o resumo da Caixinha", () ->
                 jdbc.queryForObject(sql, params, (rs, i) -> new Totais(
                         rs.getBigDecimal("total"), rs.getBigDecimal("pago"), rs.getInt("qtLancamentos"), rs.getInt("qtPagos"))));
     }
@@ -185,28 +201,28 @@ public class CaixinhaRepositoryImpl implements CaixinhaRepository {
 
     @Override
     public List<CaixinhaComprovante> listarComprovantes(Long idLancamento) {
-        return executar("Erro ao listar comprovantes", () ->
+        return executor.executar("Erro ao listar comprovantes", () ->
                 jdbc.query(qCompListar, new MapSqlParameterSource("idLancamento", idLancamento),
                         BeanPropertyRowMapper.newInstance(CaixinhaComprovante.class)));
     }
 
     @Override
     public Optional<CaixinhaComprovante> buscarComprovante(Long id) {
-        return executar("Erro ao buscar comprovante", () ->
+        return executor.executar("Erro ao buscar comprovante", () ->
                 jdbc.query(qCompBuscar, new MapSqlParameterSource("id", id),
                         BeanPropertyRowMapper.newInstance(CaixinhaComprovante.class)).stream().findFirst());
     }
 
     @Override
     public Optional<Long> buscarComprovantePorRequisicao(String cdRequisicao) {
-        return executar("Erro ao buscar comprovante", () ->
+        return executor.executar("Erro ao buscar comprovante", () ->
                 jdbc.queryForList(qCompRequisicao, new MapSqlParameterSource("cdRequisicao", cdRequisicao), Long.class)
                         .stream().findFirst());
     }
 
     @Override
     public Long inserirComprovante(Long idLancamento, Long idArquivo, String cdRequisicao) {
-        return executar("Erro ao salvar comprovante", () -> {
+        return executor.executar("Erro ao salvar comprovante", () -> {
             KeyHolder keys = new GeneratedKeyHolder();
             SqlParameterSource params = new MapSqlParameterSource().addValue("idLancamento", idLancamento)
                     .addValue("idArquivo", idArquivo).addValue("cdRequisicao", cdRequisicao);
@@ -217,17 +233,6 @@ public class CaixinhaRepositoryImpl implements CaixinhaRepository {
 
     @Override
     public void deletarComprovante(Long id) {
-        executar("Erro ao excluir comprovante", () -> jdbc.update(qCompDeletar, new MapSqlParameterSource("id", id)));
-    }
-
-    private <T> T executar(String mensagem, Supplier<T> acao) {
-        try {
-            return acao.get();
-        } catch (ValidacaoException ex) {
-            throw ex;
-        } catch (Exception ex) {
-            log.error(mensagem, ex);
-            throw new ValidacaoException(NordHttpEnum.HTTP_400, mensagem, ExceptionUtils.getRootCauseMessage(ex));
-        }
+        executor.executar("Erro ao excluir comprovante", () -> jdbc.update(qCompDeletar, new MapSqlParameterSource("id", id)));
     }
 }

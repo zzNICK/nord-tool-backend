@@ -1,15 +1,14 @@
 package br.com.nord_tool_backend.controller.write;
 
+import br.com.nord_tool_backend.exception.EntradaInvalidaException;
 import br.com.nord_tool_backend.controller.response.ApiResponseBody;
 import br.com.nord_tool_backend.controller.response.CasamentoResponse;
-import br.com.nord_tool_backend.controller.response.NordHttpEnum;
 import br.com.nord_tool_backend.dto.CasamentoAnexoDto;
 import br.com.nord_tool_backend.dto.CasamentoConfiguracaoDto;
 import br.com.nord_tool_backend.dto.CasamentoConvidadoDto;
 import br.com.nord_tool_backend.dto.CasamentoFornecedorDto;
 import br.com.nord_tool_backend.dto.CasamentoMarcoDto;
 import br.com.nord_tool_backend.dto.ImportacaoConvidadosDto;
-import br.com.nord_tool_backend.excepetion.ValidacaoException;
 import br.com.nord_tool_backend.form.CasamentoConfiguracaoForm;
 import br.com.nord_tool_backend.form.CasamentoConvidadoForm;
 import br.com.nord_tool_backend.form.CasamentoFornecedorForm;
@@ -161,7 +160,7 @@ public class CasamentoWriteController implements CasamentoResponse {
         try {
             return arquivo.getBytes();
         } catch (IOException ex) {
-            throw new ValidacaoException(NordHttpEnum.HTTP_400, "Não foi possível ler o arquivo enviado", ex.getMessage());
+            throw new EntradaInvalidaException("Não foi possível ler o arquivo enviado", ex);
         }
     }
 }

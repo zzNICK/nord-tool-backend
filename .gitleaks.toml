@@ -1,0 +1,10 @@
+# Regras padrão do gitleaks; fixtures de teste e o modelo .env.example não são segredos reais.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Fixtures de teste e modelo de variáveis"
+paths = [
+  '''^src/test/''',
+  '''^\.env\.example$''',
+]

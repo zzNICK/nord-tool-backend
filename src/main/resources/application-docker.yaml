@@ -17,6 +17,12 @@ spring:
       minimum-idle: 1
       maximum-pool-size: 10
 
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
 nord-tool:
   cors:
     allowed-origins: ${NORD_CORS_ORIGINS:http://localhost:5173}

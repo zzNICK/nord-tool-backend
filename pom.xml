@@ -13,7 +13,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>2.7.15</version>
+        <version>2.7.18</version>
         <relativePath/>
     </parent>
 
@@ -61,7 +61,7 @@
         <dependency>
             <groupId>org.apache.poi</groupId>
             <artifactId>poi-ooxml</artifactId>
-            <version>5.2.4</version>
+            <version>5.4.1</version>
         </dependency>
 
         <!-- Lombok -->
@@ -75,7 +75,7 @@
         <dependency>
             <groupId>org.springdoc</groupId>
             <artifactId>springdoc-openapi-ui</artifactId>
-            <version>1.7.0</version>
+            <version>1.8.0</version>
         </dependency>
 
         <!-- Exception / Commons Lang3 (gerenciado pelo parent do Spring Boot) -->
@@ -140,6 +140,19 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+
+            <!-- Política de testes (steering/nord-tool-backend/testing.md): só *ServiceImplTest e as 2 guardas.
+                 Quem barra outros padrões é o gate do CI (scripts/verificar-politica-testes.sh). -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <includes>
+                        <include>**/*ServiceImplTest.java</include>
+                        <include>**/guard/*GuardTest.java</include>
+                    </includes>
+                </configuration>
             </plugin>
         </plugins>
     </build>

@@ -1,16 +1,16 @@
 package br.com.nord_tool_backend.guard;
 
 import br.com.nord_tool_backend.handler.GlobalExceptionHandler;
-import br.com.nord_tool_backend.security.AcessoModulo;
 import br.com.nord_tool_backend.security.JwtAuthenticationFilter;
-import br.com.nord_tool_backend.security.JwtService;
 import br.com.nord_tool_backend.security.JwtServiceImpl;
 import br.com.nord_tool_backend.security.SecurityConfig;
 import br.com.nord_tool_backend.security.SecurityProperties;
+import br.com.nord_tool_backend.service.SessaoService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;
 import org.springframework.context.annotation.Import;
 import org.springframework.core.annotation.AnnotatedElementUtils;
@@ -41,8 +41,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Se alguém criar uma rota nova, ela entra na varredura automaticamente.
  */
 @WebMvcTest(controllers = RotasProtegidasGuardTest.Rota.class)
-@Import({SecurityConfig.class, JwtAuthenticationFilter.class, JwtServiceImpl.class, SecurityProperties.class, GlobalExceptionHandler.class, AcessoModulo.class})
-@TestPropertySource(properties = {"nord-tool.security.enabled=true", "nord-tool.security.jwt-secret=segredo-de-teste-com-mais-de-32-bytes!!"})
+@Import({SecurityConfig.class, JwtAuthenticationFilter.class, JwtServiceImpl.class, SecurityProperties.class, GlobalExceptionHandler.class})
+@TestPropertySource(properties = "nord-tool.security.jwt-secret=segredo-de-teste-com-mais-de-32-bytes!!")
 class RotasProtegidasGuardTest {
 
     @RestController
@@ -55,6 +55,7 @@ class RotasProtegidasGuardTest {
             "POST /api/v1/nord-tool/auth/login", "GET /nord-tool/health"));
 
     @Autowired MockMvc mvc;
+    @MockBean SessaoService sessaoService;
 
     @Test
     void todasAsRotasDosControllersExigemToken() throws Exception {

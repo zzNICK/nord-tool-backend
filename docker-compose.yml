@@ -1,20 +1,21 @@
-version: "3.9"
-
+# Ambiente local. Credenciais e chave JWT vêm do arquivo .env (copie de .env.example).
 services:
   postgres:
     image: postgres:15
     container_name: postgres
     ports:
-      - "8080:5432"
+      # Só na máquina local (o perfil local da aplicação conecta em localhost:8080).
+      - "127.0.0.1:8080:5432"
     environment:
-      POSTGRES_DB: apartamento
-      POSTGRES_USER: user_app_nord
-      POSTGRES_PASSWORD: pass_user_nord_local
+      POSTGRES_DB: ${POSTGRES_DB:-apartamento}
+      POSTGRES_USER: ${POSTGRES_USER:?defina POSTGRES_USER no .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
     volumes:
       - "postgres_data:/var/lib/postgresql/data"
-      - "C:/Users/nicon/Documents/projects/nord-tool-scripts-sql:/sql"
+      # Scripts do repositório irmão nord-tool-scripts-sql (mesma pasta pai).
+      - "../nord-tool-scripts-sql:/sql:ro"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U user_app_nord -d apartamento"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -23,16 +24,26 @@ services:
     build: .
     container_name: nord-tool-backend
     ports:
-      - "8081:8081"
+      - "127.0.0.1:8081:8081"
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/apartamento
-      SPRING_DATASOURCE_USERNAME: user_app_nord
-      SPRING_DATASOURCE_PASSWORD: pass_user_nord_local
       SPRING_PROFILES_ACTIVE: docker
-    restart: always
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-apartamento}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      NORD_JWT_KEYS: ${NORD_JWT_KEYS:?defina NORD_JWT_KEYS no .env}
+      NORD_JWT_ACTIVE_KID: ${NORD_JWT_ACTIVE_KID:-}
+      NORD_CORS_ORIGINS: ${NORD_CORS_ORIGINS:-http://localhost:5173}
+      NORD_ADMIN_EMAIL: ${NORD_ADMIN_EMAIL:-}
+      NORD_ADMIN_NAME: ${NORD_ADMIN_NAME:-}
+      NORD_ADMIN_PASSWORD: ${NORD_ADMIN_PASSWORD:-}
+    read_only: true
+    tmpfs:
+      - /tmp
+    mem_limit: 768m
+    restart: unless-stopped
 
 volumes:
   postgres_data:

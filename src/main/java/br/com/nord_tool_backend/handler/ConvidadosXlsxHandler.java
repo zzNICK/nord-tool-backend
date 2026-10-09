@@ -1,8 +1,8 @@
 package br.com.nord_tool_backend.handler;
 
-import br.com.nord_tool_backend.controller.response.NordHttpEnum;
+import br.com.nord_tool_backend.exception.NordException;
+import br.com.nord_tool_backend.exception.EntradaInvalidaException;
 import br.com.nord_tool_backend.domain.enums.StatusConvidadoEnum;
-import br.com.nord_tool_backend.excepetion.ValidacaoException;
 import br.com.nord_tool_backend.form.CasamentoConvidadoForm;
 import org.apache.poi.ss.usermodel.DataFormatter;
 import org.apache.poi.ss.usermodel.Row;
@@ -50,10 +50,10 @@ public class ConvidadosXlsxHandler {
             Row cabecalho = aba.getRow(aba.getFirstRowNum());
             Map<String, Integer> colunas = mapearColunas(cabecalho);
             if (!colunas.containsKey("nome")) {
-                throw new ValidacaoException(NordHttpEnum.HTTP_400, "A planilha precisa ter a coluna Nome na primeira linha", null);
+                throw new EntradaInvalidaException("A planilha precisa ter a coluna Nome na primeira linha");
             }
             if (aba.getLastRowNum() - aba.getFirstRowNum() > MAX_LINHAS) {
-                throw new ValidacaoException(NordHttpEnum.HTTP_400, "A planilha tem linhas demais (máximo " + MAX_LINHAS + ")", null);
+                throw new EntradaInvalidaException("A planilha tem linhas demais (máximo " + MAX_LINHAS + ")");
             }
             DataFormatter formatador = new DataFormatter();
             List<LinhaLida> linhas = new ArrayList<>();
@@ -71,10 +71,10 @@ public class ConvidadosXlsxHandler {
                 linhas.add(converter(i + 1, valores));
             }
             return linhas;
-        } catch (ValidacaoException ex) {
+        } catch (NordException ex) {
             throw ex;
         } catch (Exception ex) {
-            throw new ValidacaoException(NordHttpEnum.HTTP_400, "Planilha inválida. Envie um arquivo .xlsx", ex.getMessage());
+            throw new EntradaInvalidaException("Planilha inválida. Envie um arquivo .xlsx", ex);
         }
     }
 

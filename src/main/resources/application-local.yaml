@@ -26,5 +26,5 @@ nord-tool:
   cors:
     allowed-origins: ${NORD_CORS_ORIGINS:http://localhost:5173}
   security:
-    enabled: ${NORD_SECURITY_ENABLED:true}
+    # Só no perfil local: sem NORD_JWT_KEYS usa uma chave temporária (tokens caem ao reiniciar).
     allow-ephemeral-secret: true

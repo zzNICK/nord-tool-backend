@@ -1,9 +1,12 @@
 package br.com.nord_tool_backend.service.impl;
 
-import br.com.nord_tool_backend.controller.response.NordHttpEnum;
+import br.com.nord_tool_backend.security.Acao;
+import br.com.nord_tool_backend.security.Modulo;
+import br.com.nord_tool_backend.service.AutorizacaoService;
+import br.com.nord_tool_backend.exception.NaoEncontradoException;
+import br.com.nord_tool_backend.exception.EntradaInvalidaException;
 import br.com.nord_tool_backend.domain.CasamentoMarco;
 import br.com.nord_tool_backend.dto.CasamentoMarcoDto;
-import br.com.nord_tool_backend.excepetion.ValidacaoException;
 import br.com.nord_tool_backend.form.CasamentoMarcoForm;
 import br.com.nord_tool_backend.repository.CasamentoRepository;
 import br.com.nord_tool_backend.service.CasamentoMarcoService;
@@ -33,23 +36,28 @@ public class CasamentoMarcoServiceImpl implements CasamentoMarcoService {
             {"Confirmar logística e cronograma final", "2027-09-12"},
     };
 
-    private final CasamentoRepository repository;
+    private final CasamentoRepository repository;
+
+    private final AutorizacaoService autorizacao;
 
     @Override
     @Transactional(readOnly = true)
     public List<CasamentoMarcoDto> listar() {
+        autorizacao.exigir(Modulo.CASAMENTO, Acao.LEITURA);
         return repository.listarMarcos().stream().map(CasamentoMarcoDto::de).collect(Collectors.toList());
     }
 
     @Override
     @Transactional(readOnly = true)
     public CasamentoMarcoDto buscar(Long id) {
+        autorizacao.exigir(Modulo.CASAMENTO, Acao.LEITURA);
         return CasamentoMarcoDto.de(marco(id));
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public CasamentoMarcoDto criar(CasamentoMarcoForm form) {
+        autorizacao.exigir(Modulo.CASAMENTO, Acao.ESCRITA);
         CasamentoMarco novo = converter(form);
         novo.setInConcluido(false);
         return CasamentoMarcoDto.de(marco(repository.inserirMarco(novo)));
@@ -58,6 +66,7 @@ public class CasamentoMarcoServiceImpl implements CasamentoMarcoService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public CasamentoMarcoDto alterar(Long id, CasamentoMarcoForm form) {
+        autorizacao.exigir(Modulo.CASAMENTO, Acao.ESCRITA);
         marco(id);
         CasamentoMarco novo = converter(form);
         novo.setId(id);
@@ -68,6 +77,7 @@ public class CasamentoMarcoServiceImpl implements CasamentoMarcoService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public CasamentoMarcoDto concluir(Long id, boolean concluido) {
+        autorizacao.exigir(Modulo.CASAMENTO, Acao.ESCRITA);
         marco(id);
         repository.concluirMarco(id, concluido);
         return CasamentoMarcoDto.de(marco(id));
@@ -76,6 +86,7 @@ public class CasamentoMarcoServiceImpl implements CasamentoMarcoService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void deletar(Long id) {
+        autorizacao.exigir(Modulo.CASAMENTO, Acao.ESCRITA);
         marco(id);
         repository.deletarMarco(id);
     }
@@ -83,9 +94,9 @@ public class CasamentoMarcoServiceImpl implements CasamentoMarcoService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public List<CasamentoMarcoDto> criarPadrao() {
+        autorizacao.exigir(Modulo.CASAMENTO, Acao.ESCRITA);
         if (repository.contarMarcos() > 0) {
-            throw new ValidacaoException(NordHttpEnum.HTTP_400,
-                    "Os marcos padrão só podem ser criados quando não há marcos cadastrados", null);
+            throw new EntradaInvalidaException("Os marcos padrão só podem ser criados quando não há marcos cadastrados");
         }
         for (String[] padrao : MARCOS_PADRAO) {
             CasamentoMarco m = new CasamentoMarco();
@@ -99,7 +110,7 @@ public class CasamentoMarcoServiceImpl implements CasamentoMarcoService {
 
     private CasamentoMarco marco(Long id) {
         return repository.buscarMarco(id)
-                .orElseThrow(() -> new ValidacaoException(NordHttpEnum.HTTP_404, "Marco não encontrado", null));
+                .orElseThrow(() -> new NaoEncontradoException("Marco não encontrado"));
     }
 
     private CasamentoMarco converter(CasamentoMarcoForm form) {
